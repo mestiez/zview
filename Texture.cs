@@ -50,7 +50,7 @@ public unsafe class Texture : IDisposable
         };
     }
 
-    public static Texture Load(SDL_Renderer* renderer, string path) => Load(renderer, Image.Load<Rgb24>(path));
+    public static Texture Load(SDL_Renderer* renderer, string path) => Load(renderer, Image.Load<Rgba32>(path));
 
     public void Dispose()
     {

@@ -44,6 +44,8 @@ public unsafe class Presentation : IDisposable
     private readonly TouchInterpreter touchInterpreter = new();
     private float mouseWheel;
     private Matrix4x4 canvasToScreenMat;
+    private float bg = 0;
+    private float smoothBg = 0;
 
     private SDL_ScaleMode filter;
     public bool autoFit = true;
@@ -127,7 +129,10 @@ public unsafe class Presentation : IDisposable
             ProcessEvents();
             ProcessControls();
 
+            var b = (byte)(255 * float.Sqrt(smoothBg));
+
             SDL3.SDL_RenderClear(renderer);
+            SDL3.SDL_SetRenderDrawColor(renderer, b, b, b, 255);
             Render(clock.Elapsed.TotalSeconds);
             clock.Restart();
             SDL3.SDL_RenderPresent(renderer);
@@ -146,6 +151,8 @@ public unsafe class Presentation : IDisposable
     private void Render(double dt)
     {
         time += dt;
+        smoothBg = (float)double.Lerp(smoothBg, bg, 1 - double.Pow(1e-7f, dt));
+
         Matrix4x4.Invert(canvasToScreenMat, out var screenToCanvasMat);
 
         float x = 0, y = 0;
@@ -311,8 +318,11 @@ public unsafe class Presentation : IDisposable
             case SDL_Scancode.SDL_SCANCODE_PERIOD:
             {
                 autoFit = true;
-
-
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_B:
+            {
+                bg = bg > 0.5f ? 0 : 1;
                 break;
             }
         }

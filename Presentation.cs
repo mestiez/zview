@@ -46,6 +46,7 @@ public unsafe class Presentation : IDisposable
     private Matrix4x4 canvasToScreenMat;
 
     private SDL_ScaleMode filter;
+    public bool autoFit = true;
 
     private static readonly SDL_FColor White = new SDL_FColor { r = 1, g = 1, b = 1, a = 1 };
 
@@ -167,6 +168,7 @@ public unsafe class Presentation : IDisposable
                 {
                     Pan.X -= canvasMouseDelta.X;
                     Pan.Y -= canvasMouseDelta.Y;
+                    autoFit = false;
                 }
             }
 
@@ -181,6 +183,7 @@ public unsafe class Presentation : IDisposable
                 {
                     Pan += (canvasMouse - Pan) * s;
                     Zoom -= Zoom * s;
+                    autoFit = false;
                 }
             }
 
@@ -188,7 +191,8 @@ public unsafe class Presentation : IDisposable
             {
                 using var fingers = SDL3.SDL_GetTouchFingers(touchDevice);
                 if (fingers is not null)
-                    touchInterpreter.Update(fingers, w, h, ref Pan, ref Zoom, screenToCanvasMat);
+                    if (touchInterpreter.Update(fingers, w, h, ref Pan, ref Zoom, screenToCanvasMat))
+                        autoFit = false;
             }
         }
 
@@ -205,7 +209,22 @@ public unsafe class Presentation : IDisposable
 
         if (Texture is not null)
         {
-            var o = new Vector2(w / 2, h / 2);
+            if (autoFit)
+            {
+                var aspectRatio = (Texture.Height / (float)Texture.Width);
+
+                if (h / (float)w < aspectRatio)
+                    Zoom = (float)Texture.Height / h;
+                else
+                    Zoom = (float)Texture.Width / w;
+
+                Pan.X = w / -2f * Zoom + w / 2f;
+                Pan.Y = h / -2f * Zoom + h / 2f;
+                smoothedPan = Pan;
+                smoothedZoom = Zoom;
+            }
+
+            var o = new Vector2(w / 2f, h / 2f);
 
             SDL3.SDL_SetTextureScaleMode(Texture.Handle, filter);
 
@@ -289,6 +308,13 @@ public unsafe class Presentation : IDisposable
                 PreviousInDirectory();
                 break;
             }
+            case SDL_Scancode.SDL_SCANCODE_PERIOD:
+            {
+                autoFit = true;
+
+
+                break;
+            }
         }
     }
 
@@ -301,13 +327,14 @@ public unsafe class Presentation : IDisposable
             return;
 
         var all = currentFile.Directory?.GetFiles() ?? [];
-        FileInfo[] filtered = [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))];
+        FileInfo[] filtered =
+            [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))];
 
         if (filtered.Length == 0)
             return;
-        
+
         files = filtered;
-        for (int i = 0; i < files.Length; i++)
+        for (var i = 0; i < files.Length; i++)
         {
             if (files[i].FullName.Equals(currentFile.FullName))
             {
@@ -324,6 +351,7 @@ public unsafe class Presentation : IDisposable
             return;
 
         SetTexture(files[(index + 1) % files.Length].FullName);
+        autoFit = true;
     }
 
     private void PreviousInDirectory()
@@ -333,6 +361,7 @@ public unsafe class Presentation : IDisposable
             return;
 
         SetTexture(files[Wrap(index - 1, 0, files.Length - 1)].FullName);
+        autoFit = true;
     }
 
     // https://stackoverflow.com/questions/707370/clean-efficient-algorithm-for-wrapping-integers-in-c
@@ -393,6 +422,14 @@ public unsafe class Presentation : IDisposable
         SDL3.SDL_SetWindowTitle(window, nameof(zview));
         try
         {
+            if (Directory.Exists(path))
+            {
+                var p = Directory.GetFiles(path).FirstOrDefault();
+                if (p is not null)
+                    SetTexture(p);
+                return;
+            }
+
             var tex = Texture.Load(renderer, path);
             SetTexture(tex);
             SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - " + Path.GetFileName(path));

@@ -8,18 +8,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="09ae1d8b-690a-4567-a492-3550e656e909" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.zview/.idea/encodings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.zview/.idea/indexLayout.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.zview/.idea/projectSettingsUpdater.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.zview/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/MouseBtnState.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Presentation.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Program.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Texture.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TouchInterpreter.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/zview.csproj" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/zview.sln" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.zview/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.zview/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Presentation.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Presentation.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zview.sln.DotSettings.user" beforeDir="false" afterPath="$PROJECT_DIR$/zview.sln.DotSettings.user" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,10 +24,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/adb423d7c0b74c5babdba98e8f5987d952e00/29/3c101ac5/SDLArray`1.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/adb423d7c0b74c5babdba98e8f5987d952e00/2c/f18d8952/SDL_Keycode.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/adb423d7c0b74c5babdba98e8f5987d952e00/40/8aee7d0c/SDL_TouchID.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/adb423d7c0b74c5babdba98e8f5987d952e00/92/ebb43e41/SDLArray.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/7aa4c78f7a35574ae8754e2e1d462fce211f7cae47c24ddf791260cbc2e9f45f/ThrowHelpers.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Texture.cs" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="ProjectColorInfo">{
@@ -81,8 +69,10 @@
       <option name="PROGRAM_PARAMETERS" value="" />
       <option name="WORKING_DIRECTORY" value="" />
       <option name="PASS_PARENT_ENVS" value="1" />
+      <option name="USE_EXTERNAL_CONSOLE" value="0" />
       <option name="ENV_FILE_PATHS" value="" />
       <option name="REDIRECT_INPUT_PATH" value="" />
+      <option name="PTY_MODE" value="Auto" />
       <option name="MIXED_MODE_DEBUG" value="0" />
       <option name="USE_MONO" value="0" />
       <option name="RUNTIME_ARGUMENTS" value="" />
@@ -119,6 +109,7 @@
       <workItem from="1768070907651" duration="11079000" />
       <workItem from="1768086540323" duration="3935000" />
       <workItem from="1768091318506" duration="39000" />
+      <workItem from="1768154982669" duration="2293000" />
     </task>
     <servers />
   </component>

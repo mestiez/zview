@@ -14,11 +14,25 @@ public unsafe class Presentation : IDisposable
     public float Rotation;
     public Vector2 Scale = Vector2.One;
 
+    public static readonly string[] AcceptedExtensions =
+    [
+        "tga",
+        "tiff",
+        "png",
+        "jpeg",
+        "jpg",
+        "pbm",
+        "webp",
+        "qoi",
+        "gif"
+    ];
+
     private double time;
     private Vector2 smoothedPan;
     private float smoothedZoom = 1;
     private float smoothedRot;
     private Vector2 smoothedScale = Vector2.One;
+    private FileInfo? currentFile;
 
     private readonly SDL_Window* window;
     private readonly SDL_Renderer* renderer;
@@ -33,28 +47,28 @@ public unsafe class Presentation : IDisposable
 
     private SDL_ScaleMode filter;
 
-    private static readonly SDL_FColor white = new SDL_FColor { r = 1, g = 1, b = 1, a = 1 };
+    private static readonly SDL_FColor White = new SDL_FColor { r = 1, g = 1, b = 1, a = 1 };
 
     private readonly SDL_Vertex[] verts =
     [
         new SDL_Vertex
         {
-            color = white, position = new SDL_FPoint { x = 0, y = 0 },
+            color = White, position = new SDL_FPoint { x = 0, y = 0 },
             tex_coord = new SDL_FPoint { x = 0, y = 0 }
         },
         new SDL_Vertex
         {
-            color = white, position = new SDL_FPoint { x = 1, y = 0 },
+            color = White, position = new SDL_FPoint { x = 1, y = 0 },
             tex_coord = new SDL_FPoint { x = 1, y = 0 }
         },
         new SDL_Vertex
         {
-            color = white, position = new SDL_FPoint { x = 1, y = 1 },
+            color = White, position = new SDL_FPoint { x = 1, y = 1 },
             tex_coord = new SDL_FPoint { x = 1, y = 1 }
         },
         new SDL_Vertex
         {
-            color = white, position = new SDL_FPoint { x = 0, y = 1 },
+            color = White, position = new SDL_FPoint { x = 0, y = 1 },
             tex_coord = new SDL_FPoint { x = 0, y = 1 }
         },
     ];
@@ -96,7 +110,7 @@ public unsafe class Presentation : IDisposable
             var sx = int.Min(texture.Width, screen.w / 2);
             var sy = int.Min(texture.Height, screen.h / 2);
             SDL3.SDL_SetWindowSize(window, sx, sy);
-            SDL3.SDL_SetWindowPosition(window, (screen.w - sx) / 2, (screen.h - sy) / 2);
+            // SDL3.SDL_SetWindowPosition(window, (screen.w - sx) / 2, (screen.h - sy) / 2);
         }
 
         Texture = texture;
@@ -236,6 +250,104 @@ public unsafe class Presentation : IDisposable
             ResetView();
     }
 
+    private void ProcessKeyDown(SDL_KeyboardEvent e)
+    {
+        switch (e.scancode)
+        {
+            case SDL_Scancode.SDL_SCANCODE_F:
+            {
+                filter = filter switch
+                {
+                    SDL_ScaleMode.SDL_SCALEMODE_NEAREST => SDL_ScaleMode.SDL_SCALEMODE_LINEAR,
+                    _ => SDL_ScaleMode.SDL_SCALEMODE_NEAREST
+                };
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_R:
+            {
+                var reverse = e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LSHIFT);
+                Rotation += 1.5707963268f * (reverse ? -1 : 1);
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_H:
+            {
+                Scale.X *= -1;
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_V:
+            {
+                Scale.Y *= -1;
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_RIGHT:
+            {
+                NextInDirectory();
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_LEFT:
+            {
+                PreviousInDirectory();
+                break;
+            }
+        }
+    }
+
+    private void GetQueue(out int index, out FileInfo[] files)
+    {
+        files = [];
+        index = -1;
+
+        if (currentFile is null)
+            return;
+
+        var all = currentFile.Directory?.GetFiles() ?? [];
+        FileInfo[] filtered = [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))];
+
+        if (filtered.Length == 0)
+            return;
+        
+        files = filtered;
+        for (int i = 0; i < files.Length; i++)
+        {
+            if (files[i].FullName.Equals(currentFile.FullName))
+            {
+                index = i;
+                return;
+            }
+        }
+    }
+
+    private void NextInDirectory()
+    {
+        GetQueue(out var index, out var files);
+        if (index == -1)
+            return;
+
+        SetTexture(files[(index + 1) % files.Length].FullName);
+    }
+
+    private void PreviousInDirectory()
+    {
+        GetQueue(out var index, out var files);
+        if (index == -1)
+            return;
+
+        SetTexture(files[Wrap(index - 1, 0, files.Length - 1)].FullName);
+    }
+
+    // https://stackoverflow.com/questions/707370/clean-efficient-algorithm-for-wrapping-integers-in-c
+    // Posted by Lara Bailey, modified by community. See post 'Timeline' for change history
+    // Retrieved 2026-01-11, License - CC BY-SA 2.5
+    private static int Wrap(int kX, int kLowerBound, int kUpperBound)
+    {
+        var rangeSize = kUpperBound - kLowerBound + 1;
+
+        if (kX < kLowerBound)
+            kX += rangeSize * ((kLowerBound - kX) / rangeSize + 1);
+
+        return kLowerBound + (kX - kLowerBound) % rangeSize;
+    }
+
     private void ProcessEvents()
     {
         Array.Fill(mouseBtns, MouseBtnState.None);
@@ -267,37 +379,9 @@ public unsafe class Presentation : IDisposable
                 case SDL_EventType.SDL_EVENT_MOUSE_WHEEL:
                     mouseWheel = e.wheel.y;
                     break;
-                case SDL_EventType.SDL_EVENT_KEY_UP:
+                case SDL_EventType.SDL_EVENT_KEY_DOWN:
                 {
-                    switch (e.key.scancode)
-                    {
-                        case SDL_Scancode.SDL_SCANCODE_F:
-                        {
-                            filter = filter switch
-                            {
-                                SDL_ScaleMode.SDL_SCALEMODE_NEAREST => SDL_ScaleMode.SDL_SCALEMODE_LINEAR,
-                                _ => SDL_ScaleMode.SDL_SCALEMODE_NEAREST
-                            };
-                            break;
-                        }
-                        case SDL_Scancode.SDL_SCANCODE_R:
-                        {
-                            var reverse = e.key.mod.HasFlag(SDL_Keymod.SDL_KMOD_LSHIFT);
-                            Rotation += 1.5707963268f * (reverse ? -1 : 1);
-                            break;
-                        }
-                        case SDL_Scancode.SDL_SCANCODE_H:
-                        {
-                            Scale.X *= -1;
-                            break;
-                        }
-                        case SDL_Scancode.SDL_SCANCODE_V:
-                        {
-                            Scale.Y *= -1;
-                            break;
-                        }
-                    }
-
+                    ProcessKeyDown(e.key);
                     break;
                 }
             }
@@ -306,10 +390,13 @@ public unsafe class Presentation : IDisposable
 
     public void SetTexture(string path)
     {
+        SDL3.SDL_SetWindowTitle(window, nameof(zview));
         try
         {
             var tex = Texture.Load(renderer, path);
             SetTexture(tex);
+            SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - " + Path.GetFileName(path));
+            currentFile = new FileInfo(path);
         }
         catch (Exception exception)
         {

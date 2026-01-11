@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using SDL;
 
 namespace zview;
@@ -218,12 +219,14 @@ public unsafe class Presentation : IDisposable
         {
             if (autoFit)
             {
-                var aspectRatio = (Texture.Height / (float)Texture.Width);
+                var size = new Vector2(Texture.Width, Texture.Height);
+                size = Vector2.Abs(Vector2.Transform(size, Matrix3x2.CreateRotation(Rotation)));
+                var aspectRatio = (size.Y / size.X);
 
                 if (h / (float)w < aspectRatio)
-                    Zoom = (float)Texture.Height / h;
+                    Zoom = size.Y / h;
                 else
-                    Zoom = (float)Texture.Width / w;
+                    Zoom = size.X / w;
 
                 Pan.X = w / -2f * Zoom + w / 2f;
                 Pan.Y = h / -2f * Zoom + h / 2f;
@@ -302,7 +305,39 @@ public unsafe class Presentation : IDisposable
             }
             case SDL_Scancode.SDL_SCANCODE_V:
             {
-                Scale.Y *= -1;
+                if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
+                {
+                    if (SDL3.SDL_HasClipboardData("image/png"))
+                    {
+                        UIntPtr clipboardSize = 0;
+                        SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - loading...");
+                        var clipboard = SDL3.SDL_GetClipboardData("image/png", &clipboardSize);
+                        try
+                        {
+                            var data = new byte[clipboardSize];
+                            Marshal.Copy(clipboard, data, 0, data.Length);
+                            SetTexture(Texture.Load(renderer, data));
+                            currentFile = null;
+                        }
+                        finally
+                        {
+                            SDL3.SDL_SetWindowTitle(window, nameof(zview));
+                            SDL3.SDL_free(clipboard);
+                        }
+                    }
+                    else if (SDL3.SDL_HasClipboardText())
+                    {
+                        var p = SDL3.SDL_GetClipboardText();
+                        if (!string.IsNullOrWhiteSpace(p))
+                        {
+                            SetTexture(p);
+                            currentFile = null;
+                        }
+                    }
+                }
+                else
+                    Scale.Y *= -1;
+
                 break;
             }
             case SDL_Scancode.SDL_SCANCODE_RIGHT:
@@ -429,7 +464,7 @@ public unsafe class Presentation : IDisposable
 
     public void SetTexture(string path)
     {
-        SDL3.SDL_SetWindowTitle(window, nameof(zview));
+        SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - loading...");
         try
         {
             if (Directory.Exists(path))
@@ -448,6 +483,7 @@ public unsafe class Presentation : IDisposable
         catch (Exception exception)
         {
             Console.WriteLine(exception);
+            SDL3.SDL_SetWindowTitle(window, nameof(zview));
         }
     }
 

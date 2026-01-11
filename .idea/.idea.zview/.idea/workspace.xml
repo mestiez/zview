@@ -55,7 +55,7 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
-  <component name="RunManager" selected="Publish to folder.Publish zview to folder">
+  <component name="RunManager" selected=".NET Project.zview">
     <configuration name="Publish zview to folder" type="DotNetFolderPublish" factoryName="Publish to folder">
       <riderPublish configuration="Release" platform="Any CPU" produce_single_file="true" ready_to_run="true" target_folder="$USER_HOME$/.local/bin" target_framework="net10.0" uuid_high="-4409708661967338305" uuid_low="-5289060983258762346">
         <runtimes>
@@ -109,7 +109,7 @@
       <workItem from="1768070907651" duration="11079000" />
       <workItem from="1768086540323" duration="3935000" />
       <workItem from="1768091318506" duration="39000" />
-      <workItem from="1768154982669" duration="5672000" />
+      <workItem from="1768154982669" duration="8936000" />
     </task>
     <servers />
   </component>

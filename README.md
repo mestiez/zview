@@ -1,6 +1,8 @@
 # zview
 
-image viewer for x11
+Image viewer for x11 heavily inspired by [NoBS Image Viewer](https://ropemikad.itch.io/nobs-image-viewer).
+
+Supports `tga`, `tiff`, `png`, `jpg`, `webp`, and `qoi`.
 
 ## Usage
 
@@ -21,3 +23,4 @@ You can also drag the file into the window.
 | `->`      | Next in dir |
 | `<-`      | Previous in dir |
 
+Touchscreen drag & pinch zoom is also supported.

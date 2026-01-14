@@ -120,15 +120,19 @@ public unsafe class Presentation : IDisposable
         clock.Start();
         while (IsOpen)
         {
+            var dt = clock.Elapsed.TotalSeconds;
+            clock.Restart();
+            
             ProcessEvents();
             ProcessControls();
-
-            var b = (byte)(255 * double.Sqrt(Background.Smoothed));
-
+            
             SDL3.SDL_RenderClear(renderer);
+            
+            var b = (byte)(255 * (Background.Smoothed));
             SDL3.SDL_SetRenderDrawColor(renderer, b, b, b, 255);
-            Render(clock.Elapsed.TotalSeconds);
-            clock.Restart();
+            
+            Render(dt);
+            
             SDL3.SDL_RenderPresent(renderer);
         }
     }
@@ -145,6 +149,7 @@ public unsafe class Presentation : IDisposable
     private void Render(double dt)
     {
         time += dt;
+        Texture?.Update(dt);
 
         Matrix4x4.Invert(canvasToScreenMat, out var screenToCanvasMat);
 
@@ -230,7 +235,7 @@ public unsafe class Presentation : IDisposable
 
             var o = new Vector2(w / 2f, h / 2f);
 
-            SDL3.SDL_SetTextureScaleMode(Texture.Handle, filter);
+            SDL3.SDL_SetTextureScaleMode(Texture.TextureHandle, filter);
 
             SDL_Vertex[] vertsCopy = [..verts];
 
@@ -254,7 +259,7 @@ public unsafe class Presentation : IDisposable
             fixed (int* indices = idx)
             fixed (SDL_Vertex* vertices = vertsCopy)
             {
-                SDL3.SDL_RenderGeometry(renderer, Texture.Handle, vertices, 4, indices, 6);
+                SDL3.SDL_RenderGeometry(renderer, Texture.TextureHandle, vertices, 4, indices, 6);
             }
         }
     }
@@ -482,6 +487,7 @@ public unsafe class Presentation : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         SDL3.SDL_DestroyRenderer(renderer);
         SDL3.SDL_DestroyWindow(window);
     }

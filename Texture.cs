@@ -1,61 +1,127 @@
 using SDL;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using Image = SixLabors.ImageSharp.Image;
 
 namespace zview;
 
 public unsafe class Texture : IDisposable
 {
-    public required SDL_Texture* Handle;
+    public required Image<Rgba32> Image;
+    public required SDL_Surface* SurfaceHandle;
+    public required SDL_Texture* TextureHandle;
     public required int Width, Height;
 
-    public static Texture Load<TPixel>(SDL_Renderer* renderer, Image<TPixel> image) where TPixel : unmanaged, IPixel<TPixel>
+    private double time;
+    private int frameIndex = 0;
+    private int lastFrameRendered = -1;
+
+    public void Update(double dt)
     {
-        using var img = image;
-        var surface1 = SDL3.SDL_CreateSurface(img.Width, img.Height, SDL_PixelFormat.SDL_PIXELFORMAT_RGBA8888);
-        var pixelsIn = image.Frames.RootFrame.PixelBuffer;
-        var pixelsOut = (byte*)surface1->pixels;
+        if (Image.Frames.Count <= 1)
+            return;
+
+        // if the image is animated, we should probably animate it
+        time += dt;
+
+        var frame = Image.Frames[frameIndex % Image.Frames.Count];
+        if (lastFrameRendered != frameIndex)
+        {
+            lastFrameRendered = frameIndex;
+            UploadFrameToTexture(frame);
+        }
+
+        if (frame.Metadata.TryGetGifMetadata(out var gif))
+        {
+            if (gif.FrameDelay > 0 && time * 100 > gif.FrameDelay)
+            {
+                time = 0;
+                frameIndex++;
+            }
+        }
+        else if (frame.Metadata.TryGetPngMetadata(out var png))
+        {
+            var d = png.FrameDelay.ToDouble();
+            if (d > 0 &&time > d)
+            {
+                time = 0;
+                frameIndex++;
+            }
+        }        
+        else if (frame.Metadata.TryGetWebpFrameMetadata(out var webp))
+        {
+            if (webp.FrameDelay > 0 &&time * 1000 > webp.FrameDelay)
+            {
+                time = 0;
+                frameIndex++;
+            }
+        }
+    }
+
+    private void UploadFrameToTexture(ImageFrame<Rgba32> frame)
+    {
+        var pixelsIn = frame.PixelBuffer;
+        var pixelsOut = (byte*)SurfaceHandle->pixels;
 
         long i = 0;
-        var pitchIndex = 0;
         var pixel = new Rgba32();
-        for (int y = 0; y < surface1->h; y++)
+        for (int y = 0; y < SurfaceHandle->h; y++)
         {
-            pitchIndex = 0;
-            
-            for (int x = 0; x < surface1->w; x++)
+            for (int x = 0; x < SurfaceHandle->w; x++)
             {
                 pixelsIn[x, y].ToRgba32(ref pixel);
                 pixelsOut[i++] = pixel.A;
                 pixelsOut[i++] = pixel.B;
                 pixelsOut[i++] = pixel.G;
                 pixelsOut[i++] = pixel.R;
-                pitchIndex+=4;
             }
 
-            while (pitchIndex < surface1->pitch) // you can probably do this in a smarter way but
+            var rowBytes = SurfaceHandle->w * 4;
+            var padding = SurfaceHandle->pitch - rowBytes;
+            if (padding > 0)
             {
-                pitchIndex++;
-                i++; // im kind of retarded
+                // zero out any padding bytes at the end of the row
+                for (var p = 0; p < padding; p++)
+                    pixelsOut[i++] = 0;
             }
         }
 
-        var t = SDL3.SDL_CreateTextureFromSurface(renderer, surface1);
-        SDL3.SDL_DestroySurface(surface1);
-        return new Texture
+        var rect = new SDL_Rect
         {
-            Height = img.Height,
-            Width = img.Width,
-            Handle = t
+            x = 0, y = 0,
+            w = Width, h = Height,
         };
+        SDL3.SDL_UpdateTexture(TextureHandle, &rect, SurfaceHandle->pixels, SurfaceHandle->pitch);
     }
 
-    public static Texture Load(SDL_Renderer* renderer, string path) => Load(renderer, Image.Load<Rgba32>(path));
-    
-    public static Texture Load(SDL_Renderer* renderer, ReadOnlySpan<byte> data) => Load(renderer, Image.Load<Rgba32>(data));
+    public static Texture Load(SDL_Renderer* renderer, Image<Rgba32> img)
+    {
+        var surface = SDL3.SDL_CreateSurface(img.Width, img.Height, SDL_PixelFormat.SDL_PIXELFORMAT_RGBA8888);
+        var texture = new Texture
+        {
+            Image = img,
+            Height = img.Height,
+            Width = img.Width,
+            TextureHandle = SDL3.SDL_CreateTexture(renderer, surface->format,
+                SDL_TextureAccess.SDL_TEXTUREACCESS_STATIC, img.Width, img.Height),
+            SurfaceHandle = surface
+        };
+
+        texture.UploadFrameToTexture(img.Frames.RootFrame);
+
+        return texture;
+    }
+
+    public static Texture Load(SDL_Renderer* renderer, string path) =>
+        Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(path));
+
+    public static Texture Load(SDL_Renderer* renderer, ReadOnlySpan<byte> data) =>
+        Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(data));
 
     public void Dispose()
     {
-        SDL3.SDL_DestroyTexture(Handle);
+        SDL3.SDL_DestroyTexture(TextureHandle);
+        SDL3.SDL_DestroySurface(SurfaceHandle);
+        Image.Dispose();
     }
 }

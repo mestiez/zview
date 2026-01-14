@@ -1,19 +1,40 @@
 using System.Diagnostics;
 using System.Numerics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using SDL;
 
 namespace zview;
 
+public struct SmoothDouble(double v, double coefficient = 1e-13)
+{
+    public double Value = v, Smoothed = v;
+
+    public void Update(double dt)
+    {
+        Smoothed = double.Lerp(Smoothed, Value, 1 - double.Pow(coefficient, dt));
+    }
+}
+
+public struct SmoothVec2(Vector2 v, double coefficient = 1e-13)
+{
+    public Vector2 Value = v, Smoothed = v;
+
+    public void Update(double dt)
+    {
+        Smoothed = Vector2.Lerp(Smoothed, Value, (float)(1 - double.Pow(coefficient, dt)));
+    }
+}
+
 public unsafe class Presentation : IDisposable
 {
     public Texture? Texture { get; private set; }
     public bool IsOpen = true;
-    public Vector2 Pan;
-    public float Zoom = 1;
-    public float Rotation;
-    public Vector2 Scale = Vector2.One;
+
+    public SmoothVec2 Pan = new(Vector2.Zero);
+    public SmoothDouble Zoom = new(1);
+    public SmoothDouble Rotation = new(0);
+    public SmoothVec2 Scale = new(Vector2.One);
+    public SmoothDouble Background = new(0, 1e-7);
 
     public static readonly string[] AcceptedExtensions =
     [
@@ -29,27 +50,20 @@ public unsafe class Presentation : IDisposable
     ];
 
     private double time;
-    private Vector2 smoothedPan;
-    private float smoothedZoom = 1;
-    private float smoothedRot;
-    private Vector2 smoothedScale = Vector2.One;
-    private FileInfo? currentFile;
+    private bool autoFit = true;
+    private SDL_ScaleMode filter;
 
     private readonly SDL_Window* window;
     private readonly SDL_Renderer* renderer;
     private readonly SDL_Event[] eventBuffer = new SDL_Event[8];
 
     private float mouseX, mouseY;
+    private float mouseWheel;
     private readonly MouseBtnState[] mouseBtns = new MouseBtnState[8];
     private readonly SDL_TouchID[] touchDevices;
     private readonly TouchInterpreter touchInterpreter = new();
-    private float mouseWheel;
+    private FileInfo? currentFile;
     private Matrix4x4 canvasToScreenMat;
-    private float bg = 0;
-    private float smoothBg = 0;
-
-    private SDL_ScaleMode filter;
-    public bool autoFit = true;
 
     private static readonly SDL_FColor White = new SDL_FColor { r = 1, g = 1, b = 1, a = 1 };
 
@@ -111,10 +125,9 @@ public unsafe class Presentation : IDisposable
         {
             var screen = new SDL_Rect();
             SDL3.SDL_GetDisplayBounds(SDL3.SDL_GetDisplayForWindow(window), &screen);
-            var sx = int.Min(texture.Width, screen.w / 2);
-            var sy = int.Min(texture.Height, screen.h / 2);
+            var sx = int.Clamp(texture.Width, 256, screen.w / 2);
+            var sy = int.Clamp(texture.Height, 256, screen.h / 2);
             SDL3.SDL_SetWindowSize(window, sx, sy);
-            // SDL3.SDL_SetWindowPosition(window, (screen.w - sx) / 2, (screen.h - sy) / 2);
         }
 
         Texture = texture;
@@ -130,7 +143,7 @@ public unsafe class Presentation : IDisposable
             ProcessEvents();
             ProcessControls();
 
-            var b = (byte)(255 * float.Sqrt(smoothBg));
+            var b = (byte)(255 * double.Sqrt(Background.Smoothed));
 
             SDL3.SDL_RenderClear(renderer);
             SDL3.SDL_SetRenderDrawColor(renderer, b, b, b, 255);
@@ -142,17 +155,16 @@ public unsafe class Presentation : IDisposable
 
     private void ResetView()
     {
-        Pan = default;
-        Zoom = 1;
-        Rotation = 0;
-        Scale = Vector2.One;
-        smoothedRot %= float.Tau;
+        Pan.Value = Vector2.Zero;
+        Scale.Value = Vector2.One;
+        Zoom.Value = 1;
+        Rotation.Value = 0;
+        Rotation.Smoothed %= float.Tau;
     }
 
     private void Render(double dt)
     {
         time += dt;
-        smoothBg = (float)double.Lerp(smoothBg, bg, 1 - double.Pow(1e-7f, dt));
 
         Matrix4x4.Invert(canvasToScreenMat, out var screenToCanvasMat);
 
@@ -174,8 +186,8 @@ public unsafe class Presentation : IDisposable
             {
                 if (mouseBtns[1] != MouseBtnState.Pressed)
                 {
-                    Pan.X -= canvasMouseDelta.X;
-                    Pan.Y -= canvasMouseDelta.Y;
+                    Pan.Value.X -= canvasMouseDelta.X;
+                    Pan.Value.Y -= canvasMouseDelta.Y;
                     autoFit = false;
                 }
             }
@@ -189,8 +201,8 @@ public unsafe class Presentation : IDisposable
 
                 void AdjustZoom(float s)
                 {
-                    Pan += (canvasMouse - Pan) * s;
-                    Zoom -= Zoom * s;
+                    Pan.Value += (canvasMouse - Pan.Value) * s;
+                    Zoom.Value -= Zoom.Value * s;
                     autoFit = false;
                 }
             }
@@ -199,18 +211,22 @@ public unsafe class Presentation : IDisposable
             {
                 using var fingers = SDL3.SDL_GetTouchFingers(touchDevice);
                 if (fingers is not null)
-                    if (touchInterpreter.Update(fingers, w, h, ref Pan, ref Zoom, screenToCanvasMat))
+                    if (touchInterpreter.Update(fingers, w, h, ref Pan.Value, ref Zoom.Value, screenToCanvasMat))
                         autoFit = false;
             }
         }
 
         var lerpFactor = 1 - (float)double.Pow(1e-13d, dt);
-        smoothedPan = Vector2.Lerp(smoothedPan, Pan, lerpFactor);
-        smoothedZoom = float.Lerp(smoothedZoom, Zoom, lerpFactor);
-        smoothedRot = float.Lerp(smoothedRot, Rotation, lerpFactor);
-        smoothedScale = Vector2.Lerp(smoothedScale, Scale, lerpFactor);
-        var s = smoothedZoom * 2f; // i actually sincerely do not know why it has to be 2x
-        Matrix4x4.Invert(Matrix4x4.CreateTranslation(new Vector3(smoothedPan, 0)), out var view);
+        
+        Background.Update(dt);
+        Pan.Update(dt);
+        Zoom.Update(dt);
+        Rotation.Update(dt);
+        Scale.Update(dt);
+        
+        // i actually sincerely do not know why it has to be doubled. it came to me in a dream
+        var s = (float)(Zoom.Smoothed * 2); 
+        Matrix4x4.Invert(Matrix4x4.CreateTranslation(new Vector3(Pan.Smoothed, 0)), out var view);
         canvasToScreenMat =
             view *
             Matrix4x4.CreateOrthographic(s, s, 0.01f, 1);
@@ -220,18 +236,18 @@ public unsafe class Presentation : IDisposable
             if (autoFit)
             {
                 var size = new Vector2(Texture.Width, Texture.Height);
-                size = Vector2.Abs(Vector2.Transform(size, Matrix3x2.CreateRotation(Rotation)));
+                size = Vector2.Abs(Vector2.Transform(size, Matrix3x2.CreateRotation((float)Rotation.Value)));
                 var aspectRatio = (size.Y / size.X);
 
                 if (h / (float)w < aspectRatio)
-                    Zoom = size.Y / h;
+                    Zoom.Value = size.Y / h;
                 else
-                    Zoom = size.X / w;
+                    Zoom.Value = size.X / w;
 
-                Pan.X = w / -2f * Zoom + w / 2f;
-                Pan.Y = h / -2f * Zoom + h / 2f;
-                smoothedPan = Pan;
-                smoothedZoom = Zoom;
+                Pan.Value.X = (float)(w / -2f * Zoom.Value + w / 2f);
+                Pan.Value.Y = (float)(h / -2f * Zoom.Value + h / 2f);
+                Pan.Smoothed = Pan.Value;
+                Zoom.Smoothed = Zoom.Value;
             }
 
             var o = new Vector2(w / 2f, h / 2f);
@@ -243,8 +259,8 @@ public unsafe class Presentation : IDisposable
             var transform = new Matrix4x4(
                 Matrix3x2.CreateScale(Texture.Width, Texture.Height) *
                 Matrix3x2.CreateTranslation(o + new Vector2(Texture.Width, Texture.Height) * -0.5f) *
-                Matrix3x2.CreateScale(smoothedScale, o) *
-                Matrix3x2.CreateRotation(smoothedRot, o)
+                Matrix3x2.CreateScale(Scale.Smoothed, o) *
+                Matrix3x2.CreateRotation((float)Rotation.Smoothed, o)
             ) * canvasToScreenMat;
             for (var i = 0; i < vertsCopy.Length; i++)
             {
@@ -262,7 +278,6 @@ public unsafe class Presentation : IDisposable
             {
                 SDL3.SDL_RenderGeometry(renderer, Texture.Handle, vertices, 4, indices, 6);
             }
-            // SDL3.SDL_RenderTexture(renderer, Texture.Handle, &srcRect, &dstRect);
         }
     }
 
@@ -295,12 +310,12 @@ public unsafe class Presentation : IDisposable
             case SDL_Scancode.SDL_SCANCODE_R:
             {
                 var reverse = e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LSHIFT);
-                Rotation += 1.5707963268f * (reverse ? -1 : 1);
+                Rotation.Value += 1.5707963268 * (reverse ? -1 : 1);
                 break;
             }
             case SDL_Scancode.SDL_SCANCODE_H:
             {
-                Scale.X *= -1;
+                Scale.Value.X *= -1;
                 break;
             }
             case SDL_Scancode.SDL_SCANCODE_V:
@@ -336,7 +351,7 @@ public unsafe class Presentation : IDisposable
                     }
                 }
                 else
-                    Scale.Y *= -1;
+                    Scale.Value.Y *= -1;
 
                 break;
             }
@@ -357,7 +372,7 @@ public unsafe class Presentation : IDisposable
             }
             case SDL_Scancode.SDL_SCANCODE_B:
             {
-                bg = bg > 0.5f ? 0 : 1;
+                Background.Value = Background.Value > 0.5f ? 0 : 1;
                 break;
             }
         }

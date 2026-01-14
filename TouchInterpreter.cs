@@ -7,14 +7,14 @@ public class TouchInterpreter
 {
     private bool isPinchZooming = false;
     private float pinchZoomCalibrateDistance = 0;
-    private float zoomAtPinchStart = 1;
+    private double zoomAtPinchStart = 1;
     private Vector2 panAtPinchStart = default;
 
     private readonly Vector2[] previousPositions = new Vector2[2];
 
     public bool IsBeingUsed => isPinchZooming;
 
-    public bool Update(SDLPointerArray<SDL_Finger> fingers, int w, int h, ref Vector2 pan, ref float zoom,
+    public bool Update(SDLPointerArray<SDL_Finger> fingers, int w, int h, ref Vector2 pan, ref double zoom,
         Matrix4x4 screenToCanvas)
     {
         if (fingers.Count < 2)
@@ -43,7 +43,7 @@ public class TouchInterpreter
             var f = pinchZoomCalibrateDistance / dist;
             var s = 1 - f * zoomAtPinchStart / zoom;
             zoom -= zoom * s;
-            pan += (midpoint - pan) * s;
+            pan += (midpoint - pan) * (float)s;
             pan -= (finger1Delta + finger2Delta) * 4; // again no idea why the x4 multiplier
             return true;
         }

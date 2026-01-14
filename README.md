@@ -12,7 +12,7 @@ Supports `tga`, `tiff`, `png`, `jpg`, `webp`, `gif`, and `qoi`.
 
 ## Building & installing
 
-For filesize concerns, it's best to have the .NET 10 runtime installed. Run the following as a user to build to install to `~/.local/bin`.
+For filesize concerns, it's best to have the .NET 10 runtime installed. Run the following as a user to build and install to `~/.local/bin`.
 
 ```
 dotnet publish -p:PublishProfile=framework-dependent

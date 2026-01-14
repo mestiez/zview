@@ -5,26 +5,6 @@ using SDL;
 
 namespace zview;
 
-public struct SmoothDouble(double v, double coefficient = 1e-13)
-{
-    public double Value = v, Smoothed = v;
-
-    public void Update(double dt)
-    {
-        Smoothed = double.Lerp(Smoothed, Value, 1 - double.Pow(coefficient, dt));
-    }
-}
-
-public struct SmoothVec2(Vector2 v, double coefficient = 1e-13)
-{
-    public Vector2 Value = v, Smoothed = v;
-
-    public void Update(double dt)
-    {
-        Smoothed = Vector2.Lerp(Smoothed, Value, (float)(1 - double.Pow(coefficient, dt)));
-    }
-}
-
 public unsafe class Presentation : IDisposable
 {
     public Texture? Texture { get; private set; }
@@ -216,8 +196,6 @@ public unsafe class Presentation : IDisposable
             }
         }
 
-        var lerpFactor = 1 - (float)double.Pow(1e-13d, dt);
-        
         Background.Update(dt);
         Pan.Update(dt);
         Zoom.Update(dt);

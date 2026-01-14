@@ -7,6 +7,8 @@ Supports `tga`, `tiff`, `png`, `jpg`, `webp`, `gif`, and `qoi`.
 ## Dependencies
 
 - .NET 10
+- SDL3
+- ImageSharp
 
 ## Building & installing
 

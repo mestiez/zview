@@ -2,7 +2,7 @@
 
 Image viewer for X11 heavily inspired by [NoBS Image Viewer](https://ropemikad.itch.io/nobs-image-viewer).
 
-Supports `tga`, `tiff`, `png`, `jpg`, `webp`, and `qoi`.
+Supports `tga`, `tiff`, `png`, `jpg`, `webp`, `gif`, and `qoi`.
 
 ## Dependencies
 

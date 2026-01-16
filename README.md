@@ -21,7 +21,13 @@ dotnet publish -p:PublishProfile=framework-dependent
 
 ## Usage
 
-`zview [filename or folder path]`
+    zview [options] [path]
+
+    path              Path to the image or directory (optional).
+
+    Options:
+    -v, --version     Display version information.
+    -h, --help        Show help and usage information.
 
 You can also drag the file into the window.
 Touchscreen pan and pinch zoom are supported.

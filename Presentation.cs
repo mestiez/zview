@@ -18,15 +18,15 @@ public unsafe class Presentation : IDisposable
 
     public static readonly string[] AcceptedExtensions =
     [
-        "tga",
-        "tiff",
-        "png",
-        "jpeg",
-        "jpg",
-        "pbm",
-        "webp",
-        "qoi",
-        "gif"
+        ".tga",
+        ".tiff",
+        ".png",
+        ".jpeg",
+        ".jpg",
+        ".pbm",
+        ".webp",
+        ".qoi",
+        ".gif"
     ];
 
     private double time;
@@ -122,17 +122,17 @@ public unsafe class Presentation : IDisposable
         {
             var dt = clock.Elapsed.TotalSeconds;
             clock.Restart();
-            
+
             ProcessEvents();
             ProcessControls();
-            
+
             SDL3.SDL_RenderClear(renderer);
-            
+
             var b = (byte)(255 * (Background.Smoothed));
             SDL3.SDL_SetRenderDrawColor(renderer, b, b, b, 255);
-            
+
             Render(dt);
-            
+
             SDL3.SDL_RenderPresent(renderer);
         }
     }
@@ -206,9 +206,9 @@ public unsafe class Presentation : IDisposable
         Zoom.Update(dt);
         Rotation.Update(dt);
         Scale.Update(dt);
-        
+
         // i actually sincerely do not know why it has to be doubled. it came to me in a dream
-        var s = (float)(Zoom.Smoothed * 2); 
+        var s = (float)(Zoom.Smoothed * 2);
         Matrix4x4.Invert(Matrix4x4.CreateTranslation(new Vector3(Pan.Smoothed, 0)), out var view);
         canvasToScreenMat =
             view *
@@ -270,8 +270,17 @@ public unsafe class Presentation : IDisposable
         var keyStateF = SDL3.SDL_GetKeyboardState(&keyCount);
         var keyState = new Span<SDLBool>(keyStateF, keyCount);
 
-        if (keyState[(int)SDL_Scancode.SDL_SCANCODE_ESCAPE])
+        if (keyState[(int)SDL_Scancode.SDL_SCANCODE_ESCAPE] || keyState[(int)SDL_Scancode.SDL_SCANCODE_Q])
             IsOpen = false;
+
+        if (keyState[(int)SDL_Scancode.SDL_SCANCODE_W])
+        {
+            if (Texture is not null)
+            {
+                ResetView();
+                SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+            }
+        }
 
         if (keyState[(int)SDL_Scancode.SDL_SCANCODE_HOME])
             ResetView();
@@ -356,6 +365,15 @@ public unsafe class Presentation : IDisposable
             case SDL_Scancode.SDL_SCANCODE_B:
             {
                 Background.Value = Background.Value > 0.5f ? 0 : 1;
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_F5:
+            {
+                if (currentFile is not null)
+                {
+                    Background.Smoothed = Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
+                    SetTexture(currentFile.FullName);
+                }
                 break;
             }
         }
@@ -460,17 +478,17 @@ public unsafe class Presentation : IDisposable
         }
     }
 
-    public void SetTexture(string path)
+    public bool SetTexture(string path)
     {
         SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - loading...");
         try
         {
             if (Directory.Exists(path))
             {
-                var p = Directory.GetFiles(path).FirstOrDefault();
+                var p = Directory.GetFiles(path).FirstOrDefault(d =>
+                    AcceptedExtensions.Any(e => d.EndsWith(e, StringComparison.OrdinalIgnoreCase)));
                 if (p is not null)
-                    SetTexture(p);
-                return;
+                    return SetTexture(p);
             }
 
             var tex = Texture.Load(renderer, path);
@@ -480,9 +498,12 @@ public unsafe class Presentation : IDisposable
         }
         catch (Exception exception)
         {
-            Console.WriteLine(exception);
+            Console.Error.WriteLine($"Failed to open \"{path}\": " + exception.Message);
             SDL3.SDL_SetWindowTitle(window, nameof(zview));
+            return false;
         }
+
+        return true;
     }
 
     public void Dispose()

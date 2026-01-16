@@ -6,33 +6,53 @@ internal class Program
 {
     internal static void Main(string[] args)
     {
-        switch (args)
+        string? path = null;
+        if (args.Length > 0)
         {
-            case ["-v"]:
+            foreach (var arg in args)
             {
-                var ass = Assembly.GetCallingAssembly();
-                Console.WriteLine(ass.GetName()?.Version ?? new Version());
-                return;
-            }
-            case ["-h"]:
-                Console.WriteLine($"Usage: {nameof(zview)} [filename or folder path]");
-                return;
-            default:
-            {
-                if (args.Length == 1 && args[0].StartsWith('-'))
+                if (arg.StartsWith('-'))
                 {
-                    Console.Error.WriteLine("Unknown flag ({0})", args[0]);
-                    return;
+                    switch (arg)
+                    {
+                        case "-v" or "--version":
+                        {
+                            var ass = Assembly.GetExecutingAssembly();
+                            Console.WriteLine(ass.GetName()?.Version ?? throw new Exception("Assembly not found"));
+                            return;
+                        }
+                        case "-h" or "--help":
+                            Console.WriteLine("""
+                                              zview - image viewer for x11 
+
+                                              Usage:
+                                                zview [options] [path]
+
+                                              Arguments:
+                                                path              Path to the image or directory (optional).
+
+                                              Options:
+                                                -v, --version     Display version information.
+                                                -h, --help        Show help and usage information.
+                                              """);
+                            return;
+                        default:
+                            Console.Error.WriteLine("Unknown flag ({0}). Run {1} -h for usage info.", args[0],
+                                nameof(zview));
+                            return;
+                    }
                 }
-                break;
+
+                path = arg;
             }
         }
 
         using var p = new Presentation();
-
-        if (args.Length == 1)
-            p.SetTexture(args[0]);
-
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            if (!p.SetTexture(path))
+                return;
+        }
         p.RunLoop();
     }
 }

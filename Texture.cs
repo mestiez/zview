@@ -120,6 +120,7 @@ public unsafe class Texture : IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         SDL3.SDL_DestroyTexture(TextureHandle);
         SDL3.SDL_DestroySurface(SurfaceHandle);
         Image.Dispose();

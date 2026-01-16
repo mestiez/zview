@@ -139,6 +139,7 @@ public unsafe class Presentation : IDisposable
 
     private void ResetView()
     {
+        autoFit = false;
         Pan.Value = Vector2.Zero;
         Scale.Value = Vector2.One;
         Zoom.Value = 1;
@@ -153,14 +154,13 @@ public unsafe class Presentation : IDisposable
 
         Matrix4x4.Invert(canvasToScreenMat, out var screenToCanvasMat);
 
-        float x = 0, y = 0;
-        var mouseDown = SDL3.SDL_GetMouseState(&x, &y);
-        var mouseDelta = new Vector2(x - mouseX, y - mouseY);
-        var canvasMouse = Vector2.Transform(new Vector2(x, y), screenToCanvasMat);
+        float mX = 0, mY = 0;
+        var mouseDown = SDL3.SDL_GetMouseState(&mX, &mY);
+        var canvasMouse = Vector2.Transform(new Vector2(mX, mY), screenToCanvasMat);
         var canvasMouseDelta = canvasMouse - Vector2.Transform(new Vector2(mouseX, mouseY), screenToCanvasMat);
 
-        mouseX = x;
-        mouseY = y;
+        mouseX = mX;
+        mouseY = mY;
 
         int w = 0, h = 0;
         SDL3.SDL_GetWindowSize(window, &w, &h);
@@ -209,10 +209,10 @@ public unsafe class Presentation : IDisposable
 
         // i actually sincerely do not know why it has to be doubled. it came to me in a dream
         var s = (float)(Zoom.Smoothed * 2);
-        Matrix4x4.Invert(Matrix4x4.CreateTranslation(new Vector3(Pan.Smoothed, 0)), out var view);
         canvasToScreenMat =
-            view *
-            Matrix4x4.CreateOrthographic(s, s, 0.01f, 1);
+            Matrix4x4.CreateTranslation(new Vector3(-Pan.Smoothed, 0)) *
+            Matrix4x4.CreateOrthographic(s, s, 0.01f, 1) *
+            Matrix4x4.CreateTranslation(new Vector3(w / 2f, h / 2f, 0));
 
         if (Texture is not null)
         {
@@ -227,13 +227,12 @@ public unsafe class Presentation : IDisposable
                 else
                     Zoom.Value = size.X / w;
 
-                Pan.Value.X = (float)(w / -2f * Zoom.Value + w / 2f);
-                Pan.Value.Y = (float)(h / -2f * Zoom.Value + h / 2f);
+                Pan.Value = default;
                 Pan.Smoothed = Pan.Value;
                 Zoom.Smoothed = Zoom.Value;
             }
 
-            var o = new Vector2(w / 2f, h / 2f);
+            var o = Vector2.Zero;
 
             SDL3.SDL_SetTextureScaleMode(Texture.TextureHandle, filter);
 
@@ -371,9 +370,11 @@ public unsafe class Presentation : IDisposable
             {
                 if (currentFile is not null)
                 {
-                    Background.Smoothed = Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
+                    Background.Smoothed =
+                        Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
                     SetTexture(currentFile.FullName);
                 }
+
                 break;
             }
         }

@@ -110,6 +110,7 @@ public unsafe class Presentation : IDisposable
             SDL3.SDL_SetWindowSize(window, sx, sy);
         }
 
+        Texture?.Dispose();
         Texture = texture;
         ResetView();
     }
@@ -492,6 +493,7 @@ public unsafe class Presentation : IDisposable
                     return SetTexture(p);
             }
 
+            currentFile = null;
             var tex = Texture.Load(renderer, path);
             SetTexture(tex);
             SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - " + Path.GetFileName(path));

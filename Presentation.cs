@@ -82,7 +82,7 @@ public unsafe class Presentation : IDisposable
     public Presentation()
     {
         SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
-        var flags = SDL_WindowFlags.SDL_WINDOW_VULKAN | SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
+        const SDL_WindowFlags flags = SDL_WindowFlags.SDL_WINDOW_VULKAN | SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
         
         SDL_Window* w;
         SDL_Renderer* r;
@@ -223,11 +223,7 @@ public unsafe class Presentation : IDisposable
         Scale.Update(dt);
 
         // i actually sincerely do not know why it has to be doubled. it came to me in a dream
-        var s = (float)(Zoom.Smoothed * 2);
-        canvasToScreenMat =
-            Matrix4x4.CreateTranslation(new Vector3(-Pan.Smoothed, 0)) *
-            Matrix4x4.CreateOrthographic(s, s, 0.01f, 1) *
-            Matrix4x4.CreateTranslation(new Vector3(w / 2f, h / 2f, 0));
+
 
         if (Texture is not null)
         {
@@ -246,6 +242,12 @@ public unsafe class Presentation : IDisposable
                 Pan.Smoothed = Pan.Value;
                 Zoom.Smoothed = Zoom.Value;
             }
+            
+            var s = (float)(Zoom.Smoothed * 2);
+            canvasToScreenMat =
+                Matrix4x4.CreateTranslation(new Vector3(-Pan.Smoothed, 0)) *
+                Matrix4x4.CreateOrthographic(s, s, 0.01f, 1) *
+                Matrix4x4.CreateTranslation(new Vector3(w / 2f, h / 2f, 0));
 
             var o = Vector2.Zero;
 
@@ -259,6 +261,7 @@ public unsafe class Presentation : IDisposable
                 Matrix3x2.CreateScale(Scale.Smoothed, o) *
                 Matrix3x2.CreateRotation((float)Rotation.Smoothed, o)
             ) * canvasToScreenMat;
+            
             for (var i = 0; i < vertsCopy.Length; i++)
             {
                 ref var v = ref vertsCopy[i];
@@ -405,7 +408,7 @@ public unsafe class Presentation : IDisposable
 
         var all = currentFile.Directory?.GetFiles() ?? [];
         FileInfo[] filtered =
-            [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))];
+            [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase))).OrderBy(d => d.Name)];
 
         if (filtered.Length == 0)
             return;

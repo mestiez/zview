@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using SDL;
 
@@ -77,13 +78,29 @@ public unsafe class Presentation : IDisposable
         3, 2, 1
     ];
 
+
     public Presentation()
     {
+        SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
         var flags = SDL_WindowFlags.SDL_WINDOW_VULKAN | SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
+        
         SDL_Window* w;
         SDL_Renderer* r;
         SDL3.SDL_CreateWindowAndRenderer(nameof(zview), 512, 512, flags, &w, &r);
+        
+        window = w;
+        renderer = r;
+        
         SDL3.SDL_SetRenderVSync(renderer, SDL3.SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE);
+
+        {
+            var a = Assembly.GetCallingAssembly()!;
+            using var iconStream = a!.GetManifestResourceStream("zview.icon.qoi");
+            var data = new byte[2048];
+            data = data[..iconStream!.Read(data, 0, data.Length)];
+            using var iconTex = Texture.Load(renderer, data);
+            SDL3.SDL_SetWindowIcon(window, iconTex.SurfaceHandle);
+        }
 
         using var td = SDL3.SDL_GetTouchDevices();
         if (td is not null)
@@ -94,9 +111,6 @@ public unsafe class Presentation : IDisposable
         }
         else
             touchDevices = [];
-
-        window = w;
-        renderer = r;
     }
 
     public void SetTexture(Texture texture)
@@ -105,8 +119,8 @@ public unsafe class Presentation : IDisposable
         {
             var screen = new SDL_Rect();
             SDL3.SDL_GetDisplayBounds(SDL3.SDL_GetDisplayForWindow(window), &screen);
-            var sx = int.Clamp(texture.Width, 256, screen.w / 2);
-            var sy = int.Clamp(texture.Height, 256, screen.h / 2);
+            var sx = int.Clamp(texture.Width, 256, int.Max(256, screen.w / 2));
+            var sy = int.Clamp(texture.Height, 256, int.Max(256, screen.h / 2));
             SDL3.SDL_SetWindowSize(window, sx, sy);
         }
 

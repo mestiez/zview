@@ -7,22 +7,26 @@ Supports `tga`, `tiff`, `png`, `jpg`, `webp`, `gif`, and `qoi`.
 ## Dependencies
 
 - .NET 10
-- SDL3
-- ImageSharp
+- libSDL3
 
 ## Building & installing
 
-For filesize concerns, it's best to have the .NET 10 runtime installed. Run the following as a user to build and install
-to `~/.local/bin`.
+Ensure SDL3 and .NET 10 SDK are installed.
+
+Run the following as a user to build and install
+to `~/.local/bin`. You can provide an alternative output directory using the `--output` option.
 
 ```
 dotnet publish -p:PublishProfile=framework-dependent
 ```
 
+Or use the [prebuilt binaries](/mestiez/zview/releases) if you're on amd64.
+
 ## Usage
 
     zview [options] [path]
 
+	Arguments:
     path              Path to the image or directory (optional).
 
     Options:
@@ -54,3 +58,4 @@ Touchscreen pan and pinch zoom are supported.
 - All images are fully loaded into memory before being displayed. For large and/or animated images, this can become a
   problem. 
 - HDR images aren't rendered correctly
+- The directory queue is reloaded every time an arrow key is pressed (should probably be cached until F5 is pressed)

@@ -113,7 +113,7 @@ public unsafe class Texture : IDisposable
     }
 
     public static Texture Load(SDL_Renderer* renderer, string path) =>
-        Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(path));
+        Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
 
     public static Texture Load(SDL_Renderer* renderer, ReadOnlySpan<byte> data) =>
         Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(data));

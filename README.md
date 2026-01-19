@@ -52,6 +52,7 @@ Touchscreen pan and pinch zoom are supported.
 |          `->` | Next in directory       |
 |          `<-` | Previous in directory   |
 |          `F5` | Reload image            |
+|           `I` | Show image info         |
 | `Q`, `Escape` | Quit                    |
 
 ## Known issues and limitations

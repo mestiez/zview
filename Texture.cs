@@ -7,10 +7,11 @@ namespace zview;
 
 public unsafe class Texture : IDisposable
 {
-    public required Image<Rgba32> Image;
+    public required Image<Rgba32>? Image;
     public required SDL_Surface* SurfaceHandle;
     public required SDL_Texture* TextureHandle;
     public required int Width, Height;
+    public FileInfo? SourceFile;
 
     private double time;
     private int frameIndex = 0;
@@ -18,7 +19,7 @@ public unsafe class Texture : IDisposable
 
     public void Update(double dt)
     {
-        if (Image.Frames.Count <= 1)
+        if (Image is null || Image.Frames.Count <= 1)
             return;
 
         // if the image is animated, we should probably animate it
@@ -76,14 +77,7 @@ public unsafe class Texture : IDisposable
                 pixelsOut[i++] = pixel.R;
             }
 
-            var rowBytes = SurfaceHandle->w * 4;
-            var padding = SurfaceHandle->pitch - rowBytes;
-            if (padding > 0)
-            {
-                // zero out any padding bytes at the end of the row
-                for (var p = 0; p < padding; p++)
-                    pixelsOut[i++] = 0;
-            }
+            i += SurfaceHandle->pitch - SurfaceHandle->w * 4;
         }
 
         var rect = new SDL_Rect
@@ -112,8 +106,12 @@ public unsafe class Texture : IDisposable
         return texture;
     }
 
-    public static Texture Load(SDL_Renderer* renderer, string path) =>
-        Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
+    public static Texture Load(SDL_Renderer* renderer, string path)
+    {
+        var x = Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
+        x.SourceFile = new(path);
+        return x;
+    }
 
     public static Texture Load(SDL_Renderer* renderer, ReadOnlySpan<byte> data) =>
         Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(data));
@@ -123,6 +121,6 @@ public unsafe class Texture : IDisposable
         GC.SuppressFinalize(this);
         SDL3.SDL_DestroyTexture(TextureHandle);
         SDL3.SDL_DestroySurface(SurfaceHandle);
-        Image.Dispose();
+        Image?.Dispose();
     }
 }

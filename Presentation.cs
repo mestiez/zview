@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using SDL;
 
 namespace zview;
@@ -35,6 +36,7 @@ public unsafe class Presentation : IDisposable
     private bool autoFit = true;
     private bool autoSizeWindow = false;
     private SDL_ScaleMode filter;
+    private bool showInfo;
 
     private readonly SDL_Window* window;
     private readonly SDL_Renderer* renderer;
@@ -45,8 +47,12 @@ public unsafe class Presentation : IDisposable
     private readonly MouseBtnState[] mouseBtns = new MouseBtnState[8];
     private readonly SDL_TouchID[] touchDevices;
     private readonly TouchInterpreter touchInterpreter = new();
-    private FileInfo? currentFile;
     private Matrix4x4 canvasToScreenMat;
+    private BdfFont font = BdfFont.Load(GetResourceStream("zview.haxor-12.bdf"));
+    private FontTextureAtlas fontAtlas;
+    private string? currentInfo;
+    private FileInfo[] currentQueue = [];
+    private int currentIndexInQueue = 0;
 
     private static readonly SDL_FColor White = new SDL_FColor { r = 1, g = 1, b = 1, a = 1 };
 
@@ -80,7 +86,6 @@ public unsafe class Presentation : IDisposable
         3, 2, 1
     ];
 
-
     public Presentation()
     {
         SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
@@ -93,16 +98,12 @@ public unsafe class Presentation : IDisposable
         window = w;
         renderer = r;
 
-        SDL3.SDL_SetRenderVSync(renderer, SDL3.SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE);
+        // SDL3.SDL_SetRenderVSync(renderer, SDL3.SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE);
 
-        {
-            var a = Assembly.GetCallingAssembly()!;
-            using var iconStream = a!.GetManifestResourceStream("zview.icon.qoi");
-            var data = new byte[2048];
-            data = data[..iconStream!.Read(data, 0, data.Length)];
-            using var iconTex = Texture.Load(renderer, data);
-            SDL3.SDL_SetWindowIcon(window, iconTex.SurfaceHandle);
-        }
+        using var iconTex = Texture.Load(renderer, GetResource("zview.icon.qoi"));
+        SDL3.SDL_SetWindowIcon(window, iconTex.SurfaceHandle);
+
+        fontAtlas = font.CreateAtlas(renderer);
 
         using var td = SDL3.SDL_GetTouchDevices();
         if (td is not null)
@@ -129,6 +130,38 @@ public unsafe class Presentation : IDisposable
         Texture?.Dispose();
         Texture = texture;
         ResetView();
+
+        GetQueue(out currentIndexInQueue, out currentQueue);
+
+        var b = new StringBuilder();
+        if (Texture.SourceFile is not null)
+        {
+            if (currentQueue is { Length: > 1 })
+                b.AppendLine($"queue: {currentIndexInQueue + 1} / {currentQueue.Length}");
+
+            b.AppendLine($"file: {Texture.SourceFile.Name}");
+            b.AppendLine($"path: {Texture.SourceFile.FullName}");
+            b.AppendLine($"size: {HumanReadableByteCount(Texture.SourceFile.Length)}");
+            b.AppendLine();
+
+            static string HumanReadableByteCount(long b)
+            {
+                return b switch
+                {
+                    >= 1000_000_000 => $"{(b / 1e9):N1} GB",
+                    >= 1000_000 => $"{(b / 1e6):N1} MB",
+                    >= 1000 => $"{(b / 1e3):N1} kB",
+                    _ => $"{b} B"
+                };
+            }
+        }
+        else
+            b.AppendLine("image: raw");
+
+        b.AppendLine($"dimensions: {Texture.Width}x{Texture.Height}");
+
+        currentInfo = b.ToString();
+
         if (autoSizeWindow)
             SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
     }
@@ -145,15 +178,27 @@ public unsafe class Presentation : IDisposable
             ProcessEvents();
             ProcessControls();
 
-            SDL3.SDL_RenderClear(renderer);
-
             var b = (byte)(255 * (Background.Smoothed));
             SDL3.SDL_SetRenderDrawColor(renderer, b, b, b, 255);
+            SDL3.SDL_RenderClear(renderer);
 
             Render(dt);
 
             SDL3.SDL_RenderPresent(renderer);
         }
+    }
+
+    private static Stream GetResourceStream(string path)
+    {
+        var a = Assembly.GetCallingAssembly()!;
+        return a!.GetManifestResourceStream(path)!;
+    }
+
+    private static ReadOnlySpan<byte> GetResource(string path, int bufferSize = 2048)
+    {
+        using var s = GetResourceStream(path);
+        var data = new byte[bufferSize];
+        return data.AsSpan(..s!.Read(data, 0, data.Length));
     }
 
     private void ResetView()
@@ -226,9 +271,6 @@ public unsafe class Presentation : IDisposable
         Rotation.Update(dt);
         Scale.Update(dt);
 
-        // i actually sincerely do not know why it has to be doubled. it came to me in a dream
-
-
         if (Texture is not null)
         {
             if (autoFit)
@@ -282,6 +324,24 @@ public unsafe class Presentation : IDisposable
             {
                 SDL3.SDL_RenderGeometry(renderer, Texture.TextureHandle, vertices, 4, indices, 6);
             }
+
+            if (showInfo)
+            {
+                var rect = new SDL_FRect
+                {
+                    x = 0,
+                    y = 0,
+                    w = w,
+                    h = h,
+                };
+
+                SDL3.SDL_SetRenderDrawBlendMode(renderer, SDL_BlendMode.SDL_BLENDMODE_BLEND);
+                SDL3.SDL_SetRenderDrawColorFloat(renderer, 0, 0, 0, 0.8f);
+                SDL3.SDL_RenderFillRect(renderer, &rect);
+
+                if (!string.IsNullOrWhiteSpace(currentInfo))
+                    RenderText(renderer, fontAtlas, currentInfo, 16, 16);
+            }
         }
     }
 
@@ -296,6 +356,8 @@ public unsafe class Presentation : IDisposable
 
         if (keyState[(int)SDL_Scancode.SDL_SCANCODE_HOME])
             ResetView();
+
+        showInfo = keyState[(int)SDL_Scancode.SDL_SCANCODE_I];
     }
 
     private void ProcessKeyDown(SDL_KeyboardEvent e)
@@ -348,7 +410,6 @@ public unsafe class Presentation : IDisposable
                             var data = new byte[clipboardSize];
                             Marshal.Copy(clipboard, data, 0, data.Length);
                             SetTexture(Texture.Load(renderer, data));
-                            currentFile = null;
                         }
                         finally
                         {
@@ -360,10 +421,7 @@ public unsafe class Presentation : IDisposable
                     {
                         var p = SDL3.SDL_GetClipboardText();
                         if (!string.IsNullOrWhiteSpace(p))
-                        {
                             SetTexture(p);
-                            currentFile = null;
-                        }
                     }
                 }
                 else
@@ -393,11 +451,11 @@ public unsafe class Presentation : IDisposable
             }
             case SDL_Scancode.SDL_SCANCODE_F5:
             {
-                if (currentFile is not null)
+                if (Texture?.SourceFile is not null)
                 {
                     Background.Smoothed =
                         Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
-                    SetTexture(currentFile.FullName);
+                    SetTexture(Texture.SourceFile.FullName);
                 }
 
                 break;
@@ -410,10 +468,10 @@ public unsafe class Presentation : IDisposable
         files = [];
         index = -1;
 
-        if (currentFile is null)
+        if (Texture?.SourceFile is null)
             return;
 
-        var all = currentFile.Directory?.GetFiles() ?? [];
+        var all = Texture.SourceFile.Directory?.GetFiles() ?? [];
         FileInfo[] filtered =
         [
             ..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))
@@ -426,7 +484,7 @@ public unsafe class Presentation : IDisposable
         files = filtered;
         for (var i = 0; i < files.Length; i++)
         {
-            if (files[i].FullName.Equals(currentFile.FullName))
+            if (files[i].FullName.Equals(Texture.SourceFile.FullName))
             {
                 index = i;
                 return;
@@ -436,21 +494,19 @@ public unsafe class Presentation : IDisposable
 
     private void NextInDirectory()
     {
-        GetQueue(out var index, out var files);
-        if (index == -1)
+        if (currentQueue is { Length: > 1 } && currentIndexInQueue == -1)
             return;
 
-        SetTexture(files[(index + 1) % files.Length].FullName);
+        SetTexture(currentQueue[(currentIndexInQueue + 1) % currentQueue.Length].FullName);
         autoFit = true;
     }
 
     private void PreviousInDirectory()
     {
-        GetQueue(out var index, out var files);
-        if (index == -1)
+        if (currentQueue is { Length: > 1 } && currentIndexInQueue == -1)
             return;
 
-        SetTexture(files[Wrap(index - 1, 0, files.Length - 1)].FullName);
+        SetTexture(currentQueue[Wrap(currentIndexInQueue - 1, 0, currentQueue.Length - 1)].FullName);
         autoFit = true;
     }
 
@@ -520,11 +576,9 @@ public unsafe class Presentation : IDisposable
                     return SetTexture(p);
             }
 
-            currentFile = null;
             var tex = Texture.Load(renderer, path);
             SetTexture(tex);
             SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - " + Path.GetFileName(path));
-            currentFile = new FileInfo(path);
         }
         catch (Exception exception)
         {
@@ -536,10 +590,50 @@ public unsafe class Presentation : IDisposable
         return true;
     }
 
+    private void RenderText(SDL_Renderer* renderer, FontTextureAtlas fontAtlas, ReadOnlySpan<char> text, int x, int y,
+        float scale = 1)
+    {
+        var t = fontAtlas.Atlas.TextureHandle;
+        var cursor = new Vector2(x, y);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] is '\n')
+            {
+                cursor.X = x;
+                cursor.Y += fontAtlas.Font.FontSize + 5;
+            }
+            else if (!char.IsControl(text[i]) && fontAtlas.Entries.TryGetValue(text[i], out var entry))
+            {
+                var src = new SDL_FRect
+                {
+                    x = entry.TextureRect.x,
+                    y = entry.TextureRect.y,
+                    w = entry.TextureRect.w,
+                    h = entry.TextureRect.h,
+                };
+
+                var dst = new SDL_FRect
+                {
+                    x = cursor.X + entry.Glyph.Box.x,
+                    y = cursor.Y + entry.Glyph.Box.y,
+                    w = entry.Glyph.Box.w * scale,
+                    h = entry.Glyph.Box.h * scale,
+                };
+
+                SDL3.SDL_RenderTexture(renderer, t, &src, &dst);
+
+                cursor.X += entry.Glyph.MoveX * scale;
+                cursor.Y += entry.Glyph.MoveY * scale;
+            }
+        }
+    }
+
     public void Dispose()
     {
         GC.SuppressFinalize(this);
         SDL3.SDL_DestroyRenderer(renderer);
         SDL3.SDL_DestroyWindow(window);
+        Texture?.Dispose();
+        fontAtlas?.Dispose();
     }
 }

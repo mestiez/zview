@@ -45,6 +45,7 @@ Touchscreen pan and pinch zoom are supported.
 |        `Home` | Reset camera            |
 |           `.` | Auto fit image          |
 |           `W` | Auto size window        |
+|      `Ctrl+W` | Toggle auto size window |
 |           `B` | Toggle background       |
 |           `F` | Toggle linear filtering |
 |      `Ctrl+V` | Load from clipboard     |

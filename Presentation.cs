@@ -17,6 +17,7 @@ public unsafe class Presentation : IDisposable
     public SmoothVec2 Scale = new(Vector2.One);
     public SmoothDouble Background = new(0, 1e-7);
 
+    // currently accepted by default imagesharp decoder config
     public static readonly string[] AcceptedExtensions =
     [
         ".tga",
@@ -32,6 +33,7 @@ public unsafe class Presentation : IDisposable
 
     private double time;
     private bool autoFit = true;
+    private bool autoSizeWindow = false;
     private SDL_ScaleMode filter;
 
     private readonly SDL_Window* window;
@@ -83,14 +85,14 @@ public unsafe class Presentation : IDisposable
     {
         SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
         const SDL_WindowFlags flags = SDL_WindowFlags.SDL_WINDOW_VULKAN | SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
-        
+
         SDL_Window* w;
         SDL_Renderer* r;
         SDL3.SDL_CreateWindowAndRenderer(nameof(zview), 512, 512, flags, &w, &r);
-        
+
         window = w;
         renderer = r;
-        
+
         SDL3.SDL_SetRenderVSync(renderer, SDL3.SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE);
 
         {
@@ -127,6 +129,8 @@ public unsafe class Presentation : IDisposable
         Texture?.Dispose();
         Texture = texture;
         ResetView();
+        if (autoSizeWindow)
+            SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
     }
 
     public void RunLoop()
@@ -242,7 +246,7 @@ public unsafe class Presentation : IDisposable
                 Pan.Smoothed = Pan.Value;
                 Zoom.Smoothed = Zoom.Value;
             }
-            
+
             var s = (float)(Zoom.Smoothed * 2);
             canvasToScreenMat =
                 Matrix4x4.CreateTranslation(new Vector3(-Pan.Smoothed, 0)) *
@@ -261,7 +265,7 @@ public unsafe class Presentation : IDisposable
                 Matrix3x2.CreateScale(Scale.Smoothed, o) *
                 Matrix3x2.CreateRotation((float)Rotation.Smoothed, o)
             ) * canvasToScreenMat;
-            
+
             for (var i = 0; i < vertsCopy.Length; i++)
             {
                 ref var v = ref vertsCopy[i];
@@ -290,15 +294,6 @@ public unsafe class Presentation : IDisposable
         if (keyState[(int)SDL_Scancode.SDL_SCANCODE_ESCAPE] || keyState[(int)SDL_Scancode.SDL_SCANCODE_Q])
             IsOpen = false;
 
-        if (keyState[(int)SDL_Scancode.SDL_SCANCODE_W])
-        {
-            if (Texture is not null)
-            {
-                ResetView();
-                SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
-            }
-        }
-
         if (keyState[(int)SDL_Scancode.SDL_SCANCODE_HOME])
             ResetView();
     }
@@ -314,6 +309,18 @@ public unsafe class Presentation : IDisposable
                     SDL_ScaleMode.SDL_SCALEMODE_NEAREST => SDL_ScaleMode.SDL_SCALEMODE_LINEAR,
                     _ => SDL_ScaleMode.SDL_SCALEMODE_NEAREST
                 };
+                break;
+            }
+            case SDL_Scancode.SDL_SCANCODE_W:
+            {
+                if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
+                    autoSizeWindow = !autoSizeWindow;
+                else if (Texture is not null)
+                {
+                    ResetView();
+                    SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+                }
+
                 break;
             }
             case SDL_Scancode.SDL_SCANCODE_R:
@@ -408,7 +415,10 @@ public unsafe class Presentation : IDisposable
 
         var all = currentFile.Directory?.GetFiles() ?? [];
         FileInfo[] filtered =
-            [..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase))).OrderBy(d => d.Name)];
+        [
+            ..all.Where(f => AcceptedExtensions.Any(l => f.Name.EndsWith(l, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(d => d.Name)
+        ];
 
         if (filtered.Length == 0)
             return;

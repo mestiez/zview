@@ -11,7 +11,7 @@ public unsafe class BdfFont
     // why? do i keep doing this?
     // its not to spec, btw
 
-    public int FontSize, Ascent, Descent;
+    public int FontSize;
     public readonly Dictionary<char, Glyph> Glyphs = [];
 
     public struct Glyph
@@ -73,9 +73,6 @@ public unsafe class BdfFont
                 }
             }
 
-            FragToUv(cursorX, cursorY, out float uvx, out float uvy);
-            FragToUv(glyph.Box.w, glyph.Box.h, out float uxw, out float uvh);
-
             atlas.Entries.Add(glyph.Character, new FontTextureAtlas.Entry
             {
                 Glyph = glyph,
@@ -86,11 +83,6 @@ public unsafe class BdfFont
                     w = glyph.Box.w,
                     h = glyph.Box.h,
                 },
-                UvRect = new SDL_FRect
-                {
-                    x = uvx, y = uvy,
-                    w = uxw, h = uvh
-                }
             });
         }
 
@@ -186,10 +178,10 @@ public unsafe class BdfFont
                     font.FontSize = ints[0];
                     // dpi ignored because scalable values are also ignored :)
                 }
-                else if (TryRead(line, "FONT_ASCENT", ints) == 1)
-                    font.Ascent = ints[0];
-                else if (TryRead(line, "FONT_DESCENT", ints) == 1)
-                    font.Descent = ints[0];
+                // else if (TryRead(line, "FONT_ASCENT", ints) == 1)
+                //     font.Ascent = ints[0];
+                // else if (TryRead(line, "FONT_DESCENT", ints) == 1)
+                //     font.Descent = ints[0];
                 else if (line.StartsWith("STARTCHAR"))
                 {
                     writingBitmap = false;
@@ -202,14 +194,14 @@ public unsafe class BdfFont
 
         int TryRead(in ReadOnlySpan<char> line, in ReadOnlySpan<char> key, in int[] values)
         {
-            int i = 0;
-            if (line.StartsWith(key))
-            {
-                var parts = line[key.Length..].Trim().ToString().Split(' ');
-                foreach (var part in parts)
-                    if (int.TryParse(part, out var x))
-                        values[i++] = x;
-            }
+            if (!line.StartsWith(key)) 
+                return 0;
+            
+            var i = 0;
+            var parts = line[key.Length..].Trim().ToString().Split(' ');
+            foreach (var part in parts)
+                if (int.TryParse(part, out var x))
+                    values[i++] = x;
 
             return i;
         }

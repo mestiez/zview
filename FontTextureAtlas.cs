@@ -11,7 +11,6 @@ public class FontTextureAtlas : IDisposable
     public struct Entry
     {
         public BdfFont.Glyph Glyph;
-        public SDL_FRect UvRect;
         public SDL_Rect TextureRect;
     }
 

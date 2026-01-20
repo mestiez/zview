@@ -1,7 +1,7 @@
+using System.Runtime.InteropServices;
 using SDL;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using Image = SixLabors.ImageSharp.Image;
 
 namespace zview;
 
@@ -43,15 +43,15 @@ public unsafe class Texture : IDisposable
         else if (frame.Metadata.TryGetPngMetadata(out var png))
         {
             var d = png.FrameDelay.ToDouble();
-            if (d > 0 &&time > d)
+            if (d > 0 && time > d)
             {
                 time = 0;
                 frameIndex++;
             }
-        }        
+        }
         else if (frame.Metadata.TryGetWebpFrameMetadata(out var webp))
         {
-            if (webp.FrameDelay > 0 &&time * 1000 > webp.FrameDelay)
+            if (webp.FrameDelay > 0 && time * 1000 > webp.FrameDelay)
             {
                 time = 0;
                 frameIndex++;
@@ -61,36 +61,30 @@ public unsafe class Texture : IDisposable
 
     private void UploadFrameToTexture(ImageFrame<Rgba32> frame)
     {
-        var pixelsIn = frame.PixelBuffer;
         var pixelsOut = (byte*)SurfaceHandle->pixels;
 
-        long i = 0;
-        var pixel = new Rgba32();
-        for (int y = 0; y < SurfaceHandle->h; y++)
+        frame.ProcessPixelRows(img =>
         {
-            for (int x = 0; x < SurfaceHandle->w; x++)
+            for (var y = 0; y < img.Height; y++)
             {
-                pixelsIn[x, y].ToRgba32(ref pixel);
-                pixelsOut[i++] = pixel.A;
-                pixelsOut[i++] = pixel.B;
-                pixelsOut[i++] = pixel.G;
-                pixelsOut[i++] = pixel.R;
+                var row = img.GetRowSpan(y);
+                fixed (Rgba32* rowPtr = row)
+                    NativeMemory.Copy(rowPtr, &pixelsOut[y * SurfaceHandle->pitch], (UIntPtr)(row.Length * 4));
             }
-
-            i += SurfaceHandle->pitch - SurfaceHandle->w * 4;
-        }
+        });
 
         var rect = new SDL_Rect
         {
             x = 0, y = 0,
             w = Width, h = Height,
         };
+        
         SDL3.SDL_UpdateTexture(TextureHandle, &rect, SurfaceHandle->pixels, SurfaceHandle->pitch);
     }
 
     public static Texture Load(SDL_Renderer* renderer, Image<Rgba32> img)
     {
-        var surface = SDL3.SDL_CreateSurface(img.Width, img.Height, SDL_PixelFormat.SDL_PIXELFORMAT_RGBA8888);
+        var surface = SDL3.SDL_CreateSurface(img.Width, img.Height, SDL_PixelFormat.SDL_PIXELFORMAT_ABGR8888);
         var texture = new Texture
         {
             Image = img,

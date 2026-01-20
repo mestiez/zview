@@ -48,8 +48,7 @@ public unsafe class Presentation : IDisposable
     private readonly SDL_TouchID[] touchDevices;
     private readonly TouchInterpreter touchInterpreter = new();
     private Matrix4x4 canvasToScreenMat;
-    private BdfFont font = BdfFont.Load(GetResourceStream("zview.haxor-12.bdf"));
-    private FontTextureAtlas fontAtlas;
+    private FontTextureAtlas? fontAtlas;
     private string? currentInfo;
     private FileInfo[] currentQueue = [];
     private int currentIndexInQueue = 0;
@@ -88,8 +87,8 @@ public unsafe class Presentation : IDisposable
 
     public Presentation()
     {
-        SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
         const SDL_WindowFlags flags = SDL_WindowFlags.SDL_WINDOW_VULKAN | SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
+        SDL3.SDL_Init(SDL_InitFlags.SDL_INIT_EVENTS | SDL_InitFlags.SDL_INIT_VIDEO);
 
         SDL_Window* w;
         SDL_Renderer* r;
@@ -98,12 +97,8 @@ public unsafe class Presentation : IDisposable
         window = w;
         renderer = r;
 
-        // SDL3.SDL_SetRenderVSync(renderer, SDL3.SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE);
-
         using var iconTex = Texture.Load(renderer, GetResource("zview.icon.qoi"));
         SDL3.SDL_SetWindowIcon(window, iconTex.SurfaceHandle);
-
-        fontAtlas = font.CreateAtlas(renderer);
 
         using var td = SDL3.SDL_GetTouchDevices();
         if (td is not null)
@@ -114,27 +109,35 @@ public unsafe class Presentation : IDisposable
         }
         else
             touchDevices = [];
+
+        var font = BdfFont.Load(GetResourceStream("zview.haxor-12.bdf"));
+        fontAtlas = font.CreateAtlas(renderer);
     }
 
     public void SetTexture(Texture texture)
     {
-        if (Texture == null)
+        Texture?.Dispose();
+        Texture = texture;
+
+        if (autoSizeWindow)
+            SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+        else if (Texture is null)
         {
             var screen = new SDL_Rect();
             SDL3.SDL_GetDisplayBounds(SDL3.SDL_GetDisplayForWindow(window), &screen);
             var sx = int.Clamp(texture.Width, 256, int.Max(256, screen.w / 2));
             var sy = int.Clamp(texture.Height, 256, int.Max(256, screen.h / 2));
             SDL3.SDL_SetWindowSize(window, sx, sy);
+            if (sx != texture.Width || sy != texture.Height) // we mustve clamped it... auto fit
+                autoFit = true;
+            else
+                ResetView();
         }
-
-        Texture?.Dispose();
-        Texture = texture;
-        ResetView();
 
         GetQueue(out currentIndexInQueue, out currentQueue);
 
         var b = new StringBuilder();
-        if (Texture.SourceFile is not null)
+        if (Texture?.SourceFile is not null)
         {
             if (currentQueue is { Length: > 1 })
                 b.AppendLine($"queue: {currentIndexInQueue + 1} / {currentQueue.Length}");
@@ -158,12 +161,10 @@ public unsafe class Presentation : IDisposable
         else
             b.AppendLine("image: raw");
 
-        b.AppendLine($"dimensions: {Texture.Width}x{Texture.Height}");
+        if (Texture is not null)
+            b.AppendLine($"dimensions: {Texture.Width}x{Texture.Height}");
 
         currentInfo = b.ToString();
-
-        if (autoSizeWindow)
-            SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
     }
 
     public void RunLoop()
@@ -590,19 +591,19 @@ public unsafe class Presentation : IDisposable
         return true;
     }
 
-    private void RenderText(SDL_Renderer* renderer, FontTextureAtlas fontAtlas, ReadOnlySpan<char> text, int x, int y,
+    private void RenderText(SDL_Renderer* renderer, FontTextureAtlas font, ReadOnlySpan<char> text, int x, int y,
         float scale = 1)
     {
-        var t = fontAtlas.Atlas.TextureHandle;
+        var t = font.Atlas.TextureHandle;
         var cursor = new Vector2(x, y);
         for (int i = 0; i < text.Length; i++)
         {
             if (text[i] is '\n')
             {
                 cursor.X = x;
-                cursor.Y += fontAtlas.Font.FontSize + 5;
+                cursor.Y += font.Font.FontSize + 5;
             }
-            else if (!char.IsControl(text[i]) && fontAtlas.Entries.TryGetValue(text[i], out var entry))
+            else if (!char.IsControl(text[i]) && font.Entries.TryGetValue(text[i], out var entry))
             {
                 var src = new SDL_FRect
                 {

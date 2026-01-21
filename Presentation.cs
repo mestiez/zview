@@ -495,7 +495,7 @@ public unsafe class Presentation : IDisposable
 
     private void NextInDirectory()
     {
-        if (currentQueue is { Length: > 1 } && currentIndexInQueue == -1)
+        if (currentQueue is not { Length: > 1 } || currentIndexInQueue == -1)
             return;
 
         SetTexture(currentQueue[(currentIndexInQueue + 1) % currentQueue.Length].FullName);
@@ -504,7 +504,7 @@ public unsafe class Presentation : IDisposable
 
     private void PreviousInDirectory()
     {
-        if (currentQueue is { Length: > 1 } && currentIndexInQueue == -1)
+        if (currentQueue is not { Length: > 1 } || currentIndexInQueue == -1)
             return;
 
         SetTexture(currentQueue[Wrap(currentIndexInQueue - 1, 0, currentQueue.Length - 1)].FullName);

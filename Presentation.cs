@@ -116,11 +116,8 @@ public unsafe class Presentation : IDisposable
 
     public void SetTexture(Texture texture)
     {
-        Texture?.Dispose();
-        Texture = texture;
-
         if (autoSizeWindow)
-            SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+            SDL3.SDL_SetWindowSize(window, texture.Width, texture.Height);
         else if (Texture is null)
         {
             var screen = new SDL_Rect();
@@ -134,6 +131,8 @@ public unsafe class Presentation : IDisposable
                 ResetView();
         }
 
+        Texture?.Dispose();
+        Texture = texture;
         GetQueue(out currentIndexInQueue, out currentQueue);
 
         var b = new StringBuilder();
@@ -377,7 +376,11 @@ public unsafe class Presentation : IDisposable
             case SDL_Scancode.SDL_SCANCODE_W:
             {
                 if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
+                {
                     autoSizeWindow = !autoSizeWindow;
+                    if (autoSizeWindow && Texture is not null)
+                        SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+                }
                 else if (Texture is not null)
                 {
                     ResetView();

@@ -86,12 +86,6 @@ public unsafe class BdfFont
             });
         }
 
-        void FragToUv(float x, float y, out float uvx, out float uvy)
-        {
-            uvx = x / w;
-            uvy = y / h;
-        }
-
         void SetPixel(int x, int y, byte value)
         {
             if (x < 0 || x >= w || y < 0 || y >= h)

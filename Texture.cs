@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 using SDL;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using StbiSharp;
 
 namespace zview;
 
@@ -76,8 +75,10 @@ public unsafe class Texture : IDisposable
 
         var rect = new SDL_Rect
         {
-            x = 0, y = 0,
-            w = Width, h = Height,
+            x = 0,
+            y = 0,
+            w = Width,
+            h = Height,
         };
 
         SDL3.SDL_UpdateTexture(TextureHandle, &rect, SurfaceHandle->pixels, SurfaceHandle->pitch);
@@ -104,30 +105,7 @@ public unsafe class Texture : IDisposable
     public static Texture Load(SDL_Renderer* renderer, string path)
     {
         Texture x;
-        // we use stb for jpegs because its faster (also no need or alpha)
-        if (path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
-        {
-            var img = Stbi.LoadFromMemory(File.ReadAllBytes(path), 3);
-            fixed (void* pixels = img.Data)
-            {
-                var surface = SDL3.SDL_CreateSurfaceFrom(img.Width, img.Height,
-                    SDL_PixelFormat.SDL_PIXELFORMAT_RGB24,
-                    (IntPtr)pixels, img.Width * img.NumChannels);
-                x = new Texture
-                {
-                    Image = null,
-                    Height = img.Height,
-                    Width = img.Width,
-                    TextureHandle = SDL3.SDL_CreateTextureFromSurface(renderer, surface),
-                    SurfaceHandle = surface
-                };
-            }
-        }
-        else
-        {
-            x = Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
-        }
-
+        x = Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
         x.SourceFile = new(path);
         return x;
     }

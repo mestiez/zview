@@ -4,8 +4,8 @@ namespace zview;
 
 public class FontTextureAtlas : IDisposable
 {
-    public BdfFont Font;
-    public Texture Atlas;
+    public BdfFont? Font;
+    public Texture? Atlas;
     public Dictionary<char, Entry> Entries = [];
 
     public struct Entry

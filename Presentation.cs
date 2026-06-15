@@ -4,6 +4,13 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using SDL;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Qoi;
 
 namespace zview;
 
@@ -161,7 +168,41 @@ public unsafe class Presentation : IDisposable
             b.AppendLine("image: raw");
 
         if (Texture is not null)
+        {
             b.AppendLine($"dimensions: {Texture.Width}x{Texture.Height}");
+            if (Texture.Image is not null)
+            {
+                var img = Texture.Image;
+                if (img.Metadata.DecodedImageFormat is not null)
+                {
+                    if (img.Frames.Count > 1)
+                        b.AppendLine($"frame count: {img.Frames.Count}");
+                    b.AppendLine($"format: {img.Metadata.DecodedImageFormat.Name}");
+                    switch (img.Metadata.DecodedImageFormat)
+                    {
+                        case PngFormat:
+                            {
+                                var m = img.Metadata.GetPngMetadata();
+                                b.AppendLine($"\tcolor type: {m.ColorType}");
+                            }
+                            break;
+                        case QoiFormat:
+                            {
+                                var m = img.Metadata.GetQoiMetadata();
+                                b.AppendLine($"\tcolorspace: {m.ColorSpace}");
+                            }
+                            break;
+                        case JpegFormat:
+                            {
+                                var m = img.Metadata.GetJpegMetadata();
+                                b.AppendLine($"\tcolor type: {m.ColorType}");
+                                b.AppendLine($"\tquality: {m.Quality}");
+                            }
+                            break;
+                    }
+                }
+            }
+        }
 
         currentInfo = b.ToString();
     }
@@ -299,7 +340,7 @@ public unsafe class Presentation : IDisposable
 
             SDL3.SDL_SetTextureScaleMode(Texture.TextureHandle, filter);
 
-            SDL_Vertex[] vertsCopy = [..verts];
+            SDL_Vertex[] vertsCopy = [.. verts];
 
             var transform = new Matrix4x4(
                 Matrix3x2.CreateScale(Texture.Width, Texture.Height) *
@@ -339,7 +380,7 @@ public unsafe class Presentation : IDisposable
                 SDL3.SDL_SetRenderDrawColorFloat(renderer, 0, 0, 0, 0.8f);
                 SDL3.SDL_RenderFillRect(renderer, &rect);
 
-                if (!string.IsNullOrWhiteSpace(currentInfo))
+                if (!string.IsNullOrWhiteSpace(currentInfo) && fontAtlas is not null)
                     RenderText(renderer, fontAtlas, currentInfo, 16, 16);
             }
         }
@@ -365,105 +406,105 @@ public unsafe class Presentation : IDisposable
         switch (e.scancode)
         {
             case SDL_Scancode.SDL_SCANCODE_F:
-            {
-                filter = filter switch
                 {
-                    SDL_ScaleMode.SDL_SCALEMODE_NEAREST => SDL_ScaleMode.SDL_SCALEMODE_LINEAR,
-                    _ => SDL_ScaleMode.SDL_SCALEMODE_NEAREST
-                };
-                break;
-            }
+                    filter = filter switch
+                    {
+                        SDL_ScaleMode.SDL_SCALEMODE_NEAREST => SDL_ScaleMode.SDL_SCALEMODE_LINEAR,
+                        _ => SDL_ScaleMode.SDL_SCALEMODE_NEAREST
+                    };
+                    break;
+                }
             case SDL_Scancode.SDL_SCANCODE_W:
-            {
-                if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
                 {
-                    autoSizeWindow = !autoSizeWindow;
-                    if (autoSizeWindow && Texture is not null)
+                    if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
+                    {
+                        autoSizeWindow = !autoSizeWindow;
+                        if (autoSizeWindow && Texture is not null)
+                            SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
+                    }
+                    else if (Texture is not null)
+                    {
+                        ResetView();
                         SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
-                }
-                else if (Texture is not null)
-                {
-                    ResetView();
-                    SDL3.SDL_SetWindowSize(window, Texture.Width, Texture.Height);
-                }
+                    }
 
-                break;
-            }
+                    break;
+                }
             case SDL_Scancode.SDL_SCANCODE_R:
-            {
-                var reverse = e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LSHIFT);
-                Rotation.Value += 1.5707963268 * (reverse ? -1 : 1);
-                break;
-            }
+                {
+                    var reverse = e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LSHIFT);
+                    Rotation.Value += 1.5707963268 * (reverse ? -1 : 1);
+                    break;
+                }
             case SDL_Scancode.SDL_SCANCODE_H:
-            {
-                Scale.Value.X *= -1;
-                break;
-            }
+                {
+                    Scale.Value.X *= -1;
+                    break;
+                }
             case SDL_Scancode.SDL_SCANCODE_V:
-            {
-                if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
                 {
-                    if (SDL3.SDL_HasClipboardData("image/png"))
+                    if (e.mod.HasFlag(SDL_Keymod.SDL_KMOD_LCTRL))
                     {
-                        UIntPtr clipboardSize = 0;
-                        SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - loading...");
-                        var clipboard = SDL3.SDL_GetClipboardData("image/png", &clipboardSize);
-                        try
+                        if (SDL3.SDL_HasClipboardData("image/png"))
                         {
-                            var data = new byte[clipboardSize];
-                            Marshal.Copy(clipboard, data, 0, data.Length);
-                            SetTexture(Texture.Load(renderer, data));
+                            UIntPtr clipboardSize = 0;
+                            SDL3.SDL_SetWindowTitle(window, nameof(zview) + " - loading...");
+                            var clipboard = SDL3.SDL_GetClipboardData("image/png", &clipboardSize);
+                            try
+                            {
+                                var data = new byte[clipboardSize];
+                                Marshal.Copy(clipboard, data, 0, data.Length);
+                                SetTexture(Texture.Load(renderer, data));
+                            }
+                            finally
+                            {
+                                SDL3.SDL_SetWindowTitle(window, nameof(zview));
+                                SDL3.SDL_free(clipboard);
+                            }
                         }
-                        finally
+                        else if (SDL3.SDL_HasClipboardText())
                         {
-                            SDL3.SDL_SetWindowTitle(window, nameof(zview));
-                            SDL3.SDL_free(clipboard);
+                            var p = SDL3.SDL_GetClipboardText();
+                            if (!string.IsNullOrWhiteSpace(p))
+                                SetTexture(p);
                         }
                     }
-                    else if (SDL3.SDL_HasClipboardText())
-                    {
-                        var p = SDL3.SDL_GetClipboardText();
-                        if (!string.IsNullOrWhiteSpace(p))
-                            SetTexture(p);
-                    }
-                }
-                else
-                    Scale.Value.Y *= -1;
+                    else
+                        Scale.Value.Y *= -1;
 
-                break;
-            }
+                    break;
+                }
             case SDL_Scancode.SDL_SCANCODE_RIGHT:
-            {
-                NextInDirectory();
-                break;
-            }
-            case SDL_Scancode.SDL_SCANCODE_LEFT:
-            {
-                PreviousInDirectory();
-                break;
-            }
-            case SDL_Scancode.SDL_SCANCODE_PERIOD:
-            {
-                autoFit = true;
-                break;
-            }
-            case SDL_Scancode.SDL_SCANCODE_B:
-            {
-                Background.Value = Background.Value > 0.5f ? 0 : 1;
-                break;
-            }
-            case SDL_Scancode.SDL_SCANCODE_F5:
-            {
-                if (Texture?.SourceFile is not null)
                 {
-                    Background.Smoothed =
-                        Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
-                    SetTexture(Texture.SourceFile.FullName);
+                    NextInDirectory();
+                    break;
                 }
+            case SDL_Scancode.SDL_SCANCODE_LEFT:
+                {
+                    PreviousInDirectory();
+                    break;
+                }
+            case SDL_Scancode.SDL_SCANCODE_PERIOD:
+                {
+                    autoFit = true;
+                    break;
+                }
+            case SDL_Scancode.SDL_SCANCODE_B:
+                {
+                    Background.Value = Background.Value > 0.5f ? 0 : 1;
+                    break;
+                }
+            case SDL_Scancode.SDL_SCANCODE_F5:
+                {
+                    if (Texture?.SourceFile is not null)
+                    {
+                        Background.Smoothed =
+                            Background.Value > 0.5 ? 0.7 : 0.3; // a little mild flash to indicate refresh :) 
+                        SetTexture(Texture.SourceFile.FullName);
+                    }
 
-                break;
-            }
+                    break;
+                }
         }
     }
 
@@ -559,10 +600,10 @@ public unsafe class Presentation : IDisposable
                     mouseWheel = e.wheel.y;
                     break;
                 case SDL_EventType.SDL_EVENT_KEY_DOWN:
-                {
-                    ProcessKeyDown(e.key);
-                    break;
-                }
+                    {
+                        ProcessKeyDown(e.key);
+                        break;
+                    }
             }
         }
     }
@@ -597,6 +638,9 @@ public unsafe class Presentation : IDisposable
     private void RenderText(SDL_Renderer* renderer, FontTextureAtlas font, ReadOnlySpan<char> text, int x, int y,
         float scale = 1)
     {
+        if (font is not { Font: not null, Atlas: not null })
+            throw new Exception("Invalid font provided");
+
         var t = font.Atlas.TextureHandle;
         var cursor = new Vector2(x, y);
         for (int i = 0; i < text.Length; i++)

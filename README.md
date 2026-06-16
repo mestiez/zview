@@ -20,7 +20,7 @@ to `~/.local/bin`. You can provide an alternative output directory using the `--
 dotnet publish -p:PublishProfile=framework-dependent
 ```
 
-Or use the [prebuilt binaries](/mestiez/zview/releases) if you're on amd64.
+Or use the [prebuilt binaries](https://github.com/mestiez/zview/releases) if you're on amd64.
 
 ## Usage
 

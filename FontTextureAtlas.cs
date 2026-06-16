@@ -1,4 +1,4 @@
-using SDL;
+using SDL3;
 
 namespace zview;
 
@@ -11,7 +11,7 @@ public class FontTextureAtlas : IDisposable
     public struct Entry
     {
         public BdfFont.Glyph Glyph;
-        public SDL_Rect TextureRect;
+        public SDL.Rect TextureRect;
     }
 
     public void Dispose()

@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using SDL;
+using SDL3;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -8,8 +8,8 @@ namespace zview;
 public unsafe class Texture : IDisposable
 {
     public required Image<Rgba32>? Image;
-    public required SDL_Surface* SurfaceHandle;
-    public required SDL_Texture* TextureHandle;
+    public required SDL.Surface* SurfaceHandle;
+    public required nint TextureHandle;
     public required int Width, Height;
     public FileInfo? SourceFile;
 
@@ -61,7 +61,7 @@ public unsafe class Texture : IDisposable
 
     private void UploadFrameToTexture(ImageFrame<Rgba32> frame)
     {
-        var pixelsOut = (byte*)SurfaceHandle->pixels;
+        var pixelsOut = (byte*)SurfaceHandle->Pixels;
 
         frame.ProcessPixelRows(img =>
         {
@@ -69,31 +69,31 @@ public unsafe class Texture : IDisposable
             {
                 var row = img.GetRowSpan(y);
                 fixed (Rgba32* rowPtr = row)
-                    NativeMemory.Copy(rowPtr, &pixelsOut[y * SurfaceHandle->pitch], (UIntPtr)(row.Length * 4));
+                    NativeMemory.Copy(rowPtr, &pixelsOut[y * SurfaceHandle->Pitch], (UIntPtr)(row.Length * 4));
             }
         });
 
-        var rect = new SDL_Rect
+        var rect = new SDL.Rect
         {
-            x = 0,
-            y = 0,
-            w = Width,
-            h = Height,
+            X = 0,
+            Y = 0,
+            W = Width,
+            H = Height,
         };
 
-        SDL3.SDL_UpdateTexture(TextureHandle, &rect, SurfaceHandle->pixels, SurfaceHandle->pitch);
+        SDL.UpdateTexture(TextureHandle, rect, SurfaceHandle->Pixels, SurfaceHandle->Pitch);
     }
 
-    public static Texture Load(SDL_Renderer* renderer, Image<Rgba32> img)
+    public static Texture Load(nint renderer, Image<Rgba32> img)
     {
-        var surface = SDL3.SDL_CreateSurface(img.Width, img.Height, SDL_PixelFormat.SDL_PIXELFORMAT_ABGR8888);
+        var surface = (SDL.Surface*)SDL.CreateSurface(img.Width, img.Height, SDL.PixelFormat.ABGR8888);
         var texture = new Texture
         {
             Image = img,
             Height = img.Height,
             Width = img.Width,
-            TextureHandle = SDL3.SDL_CreateTexture(renderer, surface->format,
-                SDL_TextureAccess.SDL_TEXTUREACCESS_STATIC, img.Width, img.Height),
+            TextureHandle = SDL.CreateTexture(renderer, surface->Format,
+                SDL.TextureAccess.Static, img.Width, img.Height),
             SurfaceHandle = surface
         };
 
@@ -102,7 +102,7 @@ public unsafe class Texture : IDisposable
         return texture;
     }
 
-    public static Texture Load(SDL_Renderer* renderer, string path)
+    public static Texture Load(nint renderer, string path)
     {
         Texture x;
         x = Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(File.ReadAllBytes(path)));
@@ -110,14 +110,14 @@ public unsafe class Texture : IDisposable
         return x;
     }
 
-    public static Texture Load(SDL_Renderer* renderer, ReadOnlySpan<byte> data) =>
+    public static Texture Load(nint renderer, ReadOnlySpan<byte> data) =>
         Load(renderer, SixLabors.ImageSharp.Image.Load<Rgba32>(data));
 
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        SDL3.SDL_DestroyTexture(TextureHandle);
-        SDL3.SDL_DestroySurface(SurfaceHandle);
+        SDL.DestroyTexture(TextureHandle);
+        SDL.DestroySurface((nint)SurfaceHandle);
         Image?.Dispose();
     }
 }

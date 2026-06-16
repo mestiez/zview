@@ -49,6 +49,7 @@ Touchscreen pan and pinch zoom are supported.
 |           `B` | Toggle background       |
 |           `F` | Toggle linear filtering |
 |      `Ctrl+V` | Load from clipboard     |
+|      `Ctrl+C` | Copy to clipboard       |
 |          `->` | Next in directory       |
 |          `<-` | Previous in directory   |
 |          `F5` | Reload image            |
@@ -60,4 +61,5 @@ Touchscreen pan and pinch zoom are supported.
 - All images are fully loaded into memory before being displayed. For large and/or animated images, this can become a
   problem. 
 - HDR images aren't rendered correctly
+- Some colorspace information is ignored
 - The directory queue is reloaded every time an arrow key is pressed (should probably be cached until F5 is pressed)

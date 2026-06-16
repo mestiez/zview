@@ -1,6 +1,6 @@
 using System.Collections;
 using System.Globalization;
-using SDL;
+using SDL3;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace zview;
@@ -18,24 +18,24 @@ public unsafe class BdfFont
     {
         public char Character;
         public byte[] Rows;
-        public SDL_Rect Box;
+        public SDL.Rect Box;
         public int MoveX, MoveY;
     }
 
-    public FontTextureAtlas CreateAtlas(SDL_Renderer* renderer)
+    public FontTextureAtlas CreateAtlas(nint renderer)
     {
         const int w = 256;
         const int h = 128;
         const int padding = 1;
 
-        var surface = SDL3.SDL_CreateSurface(w, h, SDL_PixelFormat.SDL_PIXELFORMAT_RGBA8888);
+        var surface = (SDL.Surface*)SDL.CreateSurface(w, h, SDL.PixelFormat.RGBA8888);
         var texture = new Texture
         {
             Image = null,
             Height = w,
             Width = h,
-            TextureHandle = SDL3.SDL_CreateTexture(renderer, surface->format,
-                SDL_TextureAccess.SDL_TEXTUREACCESS_STATIC, w, h),
+            TextureHandle = SDL.CreateTexture(renderer, surface->Format,
+                SDL.TextureAccess.Static, w, h),
             SurfaceHandle = surface
         };
 
@@ -44,7 +44,7 @@ public unsafe class BdfFont
             Atlas = texture,
             Font = this
         };
-        var pixelsOut = (byte*)surface->pixels;
+        var pixelsOut = (byte*)surface->Pixels;
 
         for (var x = 0; x < w; x++)
         for (var y = 0; y < h; y++)
@@ -54,21 +54,21 @@ public unsafe class BdfFont
         int maxHeightThisRow = 0;
         foreach (var glyph in Glyphs.Values)
         {
-            maxHeightThisRow = int.Max(glyph.Box.h, maxHeightThisRow);
-            cursorX += glyph.Box.w + padding;
-            if (cursorX + padding + glyph.Box.w >= w)
+            maxHeightThisRow = int.Max(glyph.Box.H, maxHeightThisRow);
+            cursorX += glyph.Box.W + padding;
+            if (cursorX + padding + glyph.Box.W >= w)
             {
                 cursorX = padding;
                 cursorY += maxHeightThisRow + padding;
                 maxHeightThisRow = 0;
             }
 
-            for (var y = 0; y < glyph.Box.h; y++)
+            for (var y = 0; y < glyph.Box.H; y++)
             {
                 var row = glyph.Rows[y];
-                for (var x = 0; x < glyph.Box.w; x++)
+                for (var x = 0; x < glyph.Box.W; x++)
                 {
-                    if ((row & (1 << (glyph.Box.w - x - 1))) != 0)
+                    if ((row & (1 << (glyph.Box.W - x - 1))) != 0)
                         SetPixel(x + cursorX, y + cursorY, 0xFF);
                 }
             }
@@ -76,12 +76,12 @@ public unsafe class BdfFont
             atlas.Entries.Add(glyph.Character, new FontTextureAtlas.Entry
             {
                 Glyph = glyph,
-                TextureRect = new SDL_Rect
+                TextureRect = new SDL.Rect()
                 {
-                    x = cursorX,
-                    y = cursorY,
-                    w = glyph.Box.w,
-                    h = glyph.Box.h,
+                    X = cursorX,
+                    Y = cursorY,
+                    W = glyph.Box.W,
+                    H = glyph.Box.H,
                 },
             });
         }
@@ -91,21 +91,21 @@ public unsafe class BdfFont
             if (x < 0 || x >= w || y < 0 || y >= h)
                 throw new IndexOutOfRangeException();
 
-            var i = (y * surface->pitch) + (x * 4);
+            var i = (y * surface->Pitch) + (x * 4);
             pixelsOut[i + 0] = value;
             pixelsOut[i + 1] = value;
             pixelsOut[i + 2] = value;
             pixelsOut[i + 3] = value;
         }
 
-        var rect = new SDL_Rect
+        var rect = new SDL.Rect
         {
-            x = 0, y = 0,
-            w = w, h = h,
+            X = 0, Y = 0,
+            W = w, H = h,
         };
 
-        SDL3.SDL_SetTextureScaleMode(texture.TextureHandle, SDL_ScaleMode.SDL_SCALEMODE_NEAREST);
-        SDL3.SDL_UpdateTexture(texture.TextureHandle, &rect, surface->pixels, surface->pitch);
+        SDL.SetTextureScaleMode(texture.TextureHandle, SDL.ScaleMode.Nearest);
+        SDL.UpdateTexture(texture.TextureHandle, rect, surface->Pixels, surface->Pitch);
 
         return atlas;
     }
@@ -151,11 +151,11 @@ public unsafe class BdfFont
                 }
                 else if (TryRead(line, "BBX", ints) == 4)
                 {
-                    glyph.Box.w = ints[0];
-                    glyph.Box.h = ints[1];
-                    glyph.Box.x = ints[2];
-                    glyph.Box.y = ints[3];
-                    glyph.Rows = new byte[glyph.Box.h];
+                    glyph.Box.W = ints[0];
+                    glyph.Box.H = ints[1];
+                    glyph.Box.X = ints[2];
+                    glyph.Box.Y = ints[3];
+                    glyph.Rows = new byte[glyph.Box.H];
                 }
                 else if (line.StartsWith("BITMAP"))
                 {

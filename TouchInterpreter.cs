@@ -1,5 +1,5 @@
 using System.Numerics;
-using SDL;
+using SDL3;
 
 namespace zview;
 
@@ -14,17 +14,17 @@ public class TouchInterpreter
 
     public bool IsBeingUsed => isPinchZooming;
 
-    public bool Update(SDLPointerArray<SDL_Finger> fingers, int w, int h, ref Vector2 pan, ref double zoom,
+    public bool Update(SDL.Finger[] fingers, int w, int h, ref Vector2 pan, ref double zoom,
         Matrix4x4 screenToCanvas)
     {
-        if (fingers.Count < 2)
+        if (fingers.Length < 2)
         {
             isPinchZooming = false;
             return false;
         }
 
-        var finger1 = Vector2.Transform(new Vector2(fingers[0].x * w, fingers[0].y * h), screenToCanvas);
-        var finger2 = Vector2.Transform(new Vector2(fingers[1].x * w, fingers[1].y * h), screenToCanvas);
+        var finger1 = Vector2.Transform(new Vector2(fingers[0].X * w, fingers[0].Y * h), screenToCanvas);
+        var finger2 = Vector2.Transform(new Vector2(fingers[1].X * w, fingers[1].Y * h), screenToCanvas);
         var midpoint = (finger1 + finger2) * 0.5f;
 
         var finger1Delta = finger1 - previousPositions[0];
@@ -34,8 +34,8 @@ public class TouchInterpreter
         previousPositions[1] = finger2;
 
         var dist = Vector2.Distance( // we cant use the canvas-space fingers here because it depends on zoom
-            new Vector2(fingers[0].x, fingers[0].y),
-            new Vector2(fingers[1].x, fingers[1].y)
+            new Vector2(fingers[0].X, fingers[0].Y),
+            new Vector2(fingers[1].X, fingers[1].Y)
         );
 
         if (isPinchZooming)

@@ -1,0 +1,9 @@
+[package]
+name = "zview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cgmath = {version = "0.18.0", features = ["swizzle"]}
+image = "0.25.10"
+sdl3 = "0.18.4"

@@ -1,15 +1,14 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use cgmath::{
-    EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Transform, Vector2, Vector3,
-    VectorSpace, ortho,
-};
-use sdl3::event::Event;
-use sdl3::keyboard::Keycode;
+use cgmath::num_traits::FloatConst;
+use cgmath::num_traits::real::Real;
+use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
+use sdl3::event::{Event, WindowEvent};
+use sdl3::keyboard::{Keycode, Mod};
 use sdl3::pixels::{Color, FColor};
 use sdl3::render::{FPoint, Texture, Vertex, VertexIndices};
 use sdl3::sys::stdinc::SDL_free;
-use sdl3::sys::touch::{SDL_Finger, SDL_GetTouchFingers, SDL_TouchID};
+use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
 use std::path::Path;
 use std::slice;
@@ -51,6 +50,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let mut verts_transformed = verts.clone();
 
     let idx = VertexIndices::U8(&[0, 1, 3, 3, 2, 1]);
+    let mut should_update_instantly = true;
 
     ctx.canvas.set_draw_color(Color::BLACK);
     ctx.canvas.clear();
@@ -79,13 +79,44 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     mouse_wheel = -y as f64;
                 }
 
+                Event::Window { win_event, .. } => {
+                    if let WindowEvent::Resized(_, _) = win_event {
+                        should_update_instantly = true;
+                    }
+                }
+
                 // keybinds
-                Event::KeyDown { keycode, .. } => match keycode {
+                Event::KeyDown {
+                    keycode, keymod, ..
+                } => match keycode {
                     Some(Keycode::Left) => {
                         state.cycle_prev(ctx);
                     }
                     Some(Keycode::Right) => {
                         state.cycle_next(ctx);
+                    }
+
+                    // flipping heck
+                    Some(Keycode::H) => {
+                        state.scale.value.x *= -1.0;
+                    }
+                    Some(Keycode::V) => {
+                        state.scale.value.y *= -1.0;
+                    }
+
+                    // rotate
+                    Some(Keycode::R) => {
+                        let half_pi = f32::FRAC_PI_2();
+
+                        state.orientation.value += if keymod.contains(Mod::LSHIFTMOD) {
+                            -half_pi
+                        } else {
+                            half_pi
+                        };
+
+                        // snap
+                        state.orientation.value =
+                            (state.orientation.value / half_pi).round() * half_pi
                     }
                     _ => {}
                 },
@@ -159,6 +190,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     SDL_free(ptr as _);
 
                     if ctx.touch.update(fingers, state) {
+                        should_update_instantly = true;
                         break;
                     }
                 }
@@ -191,6 +223,12 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
             // final transformation
             let transform = state.sm_canvas_to_screen
+                * Matrix4::from_nonuniform_scale(
+                    state.scale.smoothed.x,
+                    state.scale.smoothed.y,
+                    1.0,
+                )
+                * Matrix4::from_angle_z(Rad(state.orientation.smoothed))
                 * Matrix4::from_translation((tex_size * -0.5).extend(0.0))
                 * Matrix4::from_nonuniform_scale(tex_w, tex_h, 1.0);
 
@@ -210,7 +248,14 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         }
 
         ctx.canvas.present();
-        state.sm_canvas_to_screen = {
+
+        state.scale.update(dt_secs);
+        state.orientation.update(dt_secs);
+
+        state.sm_canvas_to_screen = if should_update_instantly {
+            should_update_instantly = false;
+            state.canvas_to_screen
+        } else {
             const COEFFICIENT: f32 = 1e-13;
             let f = 1.0 - COEFFICIENT.powf(dt_secs);
             state.sm_canvas_to_screen.lerp(state.canvas_to_screen, f)

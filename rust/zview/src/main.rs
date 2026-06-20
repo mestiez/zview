@@ -1,5 +1,6 @@
 mod context;
 mod presentation;
+mod smoothed;
 mod touch;
 mod viewer;
 

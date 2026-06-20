@@ -1,5 +1,6 @@
 use crate::context::Context;
-use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
+use crate::smoothed::Smoothed;
+use cgmath::{Matrix4, Rad, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
@@ -21,6 +22,9 @@ pub struct Presentation {
 
     pub pan: Vector2<f32>,
     pub zoom: f32,
+
+    pub scale: Smoothed<Vector2<f32>>,
+    pub orientation: Smoothed<f32>,
 
     pub canvas_to_screen: Matrix4<f32>,
     pub screen_to_canvas: Matrix4<f32>,
@@ -45,6 +49,16 @@ impl Presentation {
 
             pan: Vector2::zero(),
             zoom: 1.0,
+            scale: Smoothed {
+                value: Vector2::new(1.0, 1.0),
+                smoothed: Vector2::new(1.0, 1.0),
+                coefficient: 1e-8_f32,
+            },
+            orientation: Smoothed {
+                value: 0.0,
+                smoothed: 0.0,
+                coefficient: 1e-8_f32,
+            },
 
             canvas_to_screen: Matrix4::identity(),
             screen_to_canvas: Matrix4::identity(),

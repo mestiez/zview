@@ -1,10 +1,14 @@
 use crate::presentation::Presentation;
-use cgmath::{EuclideanSpace, MetricSpace, Point3, Transform, Vector2, Zero};
+use cgmath::{
+    Angle, EuclideanSpace, InnerSpace, MetricSpace, Point3, Rad, Transform, Vector2, Zero,
+};
 use sdl3::touch::Finger;
+use std::ops::Add;
 
 pub struct TouchState {
     is_pinch_zooming: bool,
     initial_distance: f32,
+    initial_angle: Rad<f32>,
     initial_zoom: f32,
 
     initial_positions: [Vector2<f32>; 2],
@@ -18,6 +22,7 @@ impl TouchState {
             initial_zoom: 1.0,
             initial_positions: [Vector2::zero(), Vector2::zero()],
             initial_distance: 0.0,
+            initial_angle: Rad(0.0),
             is_pinch_zooming: false,
             frame_count: 0,
         }
@@ -34,33 +39,43 @@ impl TouchState {
             return false;
         }
 
+        let screen_finger_1 = Vector2::new(fingers[0].x as f32, fingers[0].y as f32);
+        let screen_finger_2 = Vector2::new(fingers[1].x as f32, fingers[1].y as f32);
+
         let f1 = state
             .screen_to_canvas
-            .transform_point(Point3::new(fingers[0].x, fingers[0].y, 0.0))
-            .to_vec()
-            .xy();
+            .transform_point(Point3::from_vec(screen_finger_1.extend(0.0)))
+            .xy()
+            .to_vec();
         let f2 = state
             .screen_to_canvas
-            .transform_point(Point3::new(fingers[1].x, fingers[1].y, 0.0))
-            .to_vec()
-            .xy();
+            .transform_point(Point3::from_vec(screen_finger_2.extend(0.0)))
+            .xy()
+            .to_vec();
         let midpoint = (f1 + f2) * 0.5;
 
         if self.is_pinch_zooming {
             if self.frame_count > 2 {
+                // panning
                 // todo this could be cached lol
                 let prev_midpoint = (self.initial_positions[0] + self.initial_positions[1]) * 0.5;
                 let delta = midpoint - prev_midpoint;
                 state.pan -= delta;
 
-                let dst = Vector2::distance(
-                    Vector2::new(fingers[0].x, fingers[0].y),
-                    Vector2::new(fingers[1].x, fingers[1].y),
-                );
-
+                // zoomer shit
+                let dst = Vector2::distance(screen_finger_1, screen_finger_2);
                 let ratio = dst / self.initial_distance;
-
                 state.zoom = self.initial_zoom * ratio;
+
+                // spinning
+                let prev_angle = (self.initial_positions[0] - self.initial_positions[1])
+                    .angle(Vector2::unit_x());
+                let angle = (f1 - f2).angle(Vector2::unit_x());
+                let angle_dt = (angle - prev_angle);
+
+                state.orientation.value = (self.initial_angle - angle_dt).0;
+                state.orientation.smoothed = state.orientation.value;
+                println!("{:?}", angle.0);
 
                 return true;
             } else {
@@ -72,10 +87,8 @@ impl TouchState {
             self.initial_positions[0] = f1;
             self.initial_positions[1] = f2;
 
-            self.initial_distance = Vector2::distance(
-                Vector2::new(fingers[0].x, fingers[0].y),
-                Vector2::new(fingers[1].x, fingers[1].y),
-            );
+            self.initial_distance = Vector2::distance(screen_finger_1, screen_finger_2);
+            self.initial_angle = Rad(state.orientation.value);
 
             self.frame_count = 0;
             self.initial_zoom = state.zoom;

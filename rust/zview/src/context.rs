@@ -1,3 +1,4 @@
+use crate::touch::TouchState;
 use image::{Delay, Frame};
 use sdl3::render::{Texture, TextureCreator, WindowCanvas};
 use sdl3::video::{Window, WindowContext};
@@ -11,6 +12,8 @@ pub struct Context<'a> {
 
     pub textures: Vec<Texture<'a>>,
     pub delays: Vec<Delay>,
+
+    pub touch: TouchState,
 }
 
 impl Context<'_> {

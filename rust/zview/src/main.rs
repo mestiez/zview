@@ -1,10 +1,11 @@
 mod context;
 mod presentation;
-mod smooth;
+mod touch;
 mod viewer;
 
 use crate::context::Context;
 use crate::presentation::Presentation;
+use crate::touch::TouchState;
 use crate::viewer::run;
 use std::env;
 
@@ -58,6 +59,7 @@ Options:
         tex_creator: &tc,
         textures: Vec::new(),
         delays: Vec::new(),
+        touch: TouchState::new(),
     };
 
     let mut state = Presentation::new();

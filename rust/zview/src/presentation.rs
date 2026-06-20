@@ -1,5 +1,4 @@
 use crate::context::Context;
-use crate::smooth::Smoothed;
 use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
@@ -18,13 +17,14 @@ pub struct Presentation {
     pub frame_index: usize,
 
     pub prev_mouse: Vector2<f32>,
+    pub mouse_down_frames: u32,
 
     pub pan: Vector2<f32>,
     pub zoom: f32,
 
     pub canvas_to_screen: Matrix4<f32>,
     pub screen_to_canvas: Matrix4<f32>,
-    
+
     pub sm_canvas_to_screen: Matrix4<f32>,
 
     dir: Option<PathBuf>,
@@ -41,24 +41,27 @@ impl Presentation {
             paths: Vec::new(),
 
             prev_mouse: Vector2::zero(),
+            mouse_down_frames: 0,
 
             pan: Vector2::zero(),
             zoom: 1.0,
 
             canvas_to_screen: Matrix4::identity(),
             screen_to_canvas: Matrix4::identity(),
-            
+
             sm_canvas_to_screen: Matrix4::identity(),
         }
     }
 
-    pub fn update_transforms(&mut self, window_size : Vector2<f32>) {
-        self.canvas_to_screen =
-            Matrix4::from_translation(window_size.extend(0.0) * 0.5) *
-                Matrix4::from_scale(self.zoom) *
-                Matrix4::from_translation(-self.pan.extend(0.0));
-        
-        self.screen_to_canvas = self.canvas_to_screen.invert().unwrap_or(Matrix4::identity());
+    pub fn update_transforms(&mut self, window_size: Vector2<f32>) {
+        self.canvas_to_screen = Matrix4::from_translation(window_size.extend(0.0) * 0.5)
+            * Matrix4::from_scale(self.zoom)
+            * Matrix4::from_translation(-self.pan.extend(0.0));
+
+        self.screen_to_canvas = self
+            .canvas_to_screen
+            .invert()
+            .unwrap_or(Matrix4::identity());
     }
 
     pub fn ensure_dir(&mut self) {

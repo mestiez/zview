@@ -1,11 +1,18 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use cgmath::{ortho, EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Transform, Vector2, Vector3, VectorSpace};
+use cgmath::{
+    EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Transform, Vector2, Vector3,
+    VectorSpace, ortho,
+};
 use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::{Color, FColor};
 use sdl3::render::{FPoint, Texture, Vertex, VertexIndices};
+use sdl3::sys::stdinc::SDL_free;
+use sdl3::sys::touch::{SDL_Finger, SDL_GetTouchFingers, SDL_TouchID};
+use sdl3::touch::Finger;
 use std::path::Path;
+use std::slice;
 use std::time::Duration;
 
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
@@ -108,25 +115,53 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             let delta = m.xy() - state.prev_mouse;
             state.prev_mouse = m.xy().to_vec();
 
-            if mouse.left()
-            {
-                state.pan -= delta.xy().to_vec() / state.zoom;
+            if mouse.left() && !ctx.touch.is_being_used() {
+                state.mouse_down_frames += 1;
+
+                if state.mouse_down_frames > 1 {
+                    state.pan -= delta.xy().to_vec() / state.zoom;
+                }
+            } else {
+                state.mouse_down_frames = 0;
             }
 
-            if mouse_wheel.abs() > 0.001
-            {
+            if mouse_wheel.abs() > 0.001 {
                 let cursor_before = state.screen_to_canvas.transform_point(m).xy().to_vec();
 
-                state.zoom *= if mouse_wheel < 0.0 {
-                    1.1
-                } else {
-                    0.9
-                };
+                state.zoom *= if mouse_wheel < 0.0 { 1.1 } else { 0.9 };
 
                 state.update_transforms(window_size);
                 let cursor_after = state.screen_to_canvas.transform_point(m).xy().to_vec();
                 let d = cursor_before - cursor_after;
                 state.pan += d;
+            }
+
+            state.update_transforms(window_size);
+            for touch_id in sdl3::touch::num_touch_devices() {
+                unsafe {
+                    let mut finger_count = 0;
+                    let ptr = SDL_GetTouchFingers(SDL_TouchID::from(touch_id), &mut finger_count);
+
+                    let fingers: Vec<Finger> = {
+                        let v = slice::from_raw_parts(ptr, finger_count as usize).to_vec();
+                        v.iter()
+                            .map(|f| {
+                                let ff = **f;
+                                Finger {
+                                    x: ff.x as f32 * window_size.x,
+                                    y: ff.y as f32 * window_size.y,
+                                    id: ff.id,
+                                    pressure: ff.pressure as f32,
+                                }
+                            })
+                            .collect()
+                    };
+                    SDL_free(ptr as _);
+
+                    if ctx.touch.update(fingers, state) {
+                        break;
+                    }
+                }
             }
         }
 
@@ -176,9 +211,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
         ctx.canvas.present();
         state.sm_canvas_to_screen = {
-            const COEFFICIENT : f32 = 1e-8;
+            const COEFFICIENT: f32 = 1e-13;
             let f = 1.0 - COEFFICIENT.powf(dt_secs);
-            // self.smoothed = self.smoothed + (self.value - self.smoothed) * f;
             state.sm_canvas_to_screen.lerp(state.canvas_to_screen, f)
         };
 

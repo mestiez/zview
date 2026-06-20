@@ -189,7 +189,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     };
                     SDL_free(ptr as _);
 
-                    if ctx.touch.update(fingers, state) {
+                    if ctx.touch.update(fingers, state, window_size) {
                         should_update_instantly = true;
                         break;
                     }

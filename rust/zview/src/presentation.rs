@@ -11,6 +11,7 @@ use sdl3::surface::Surface;
 use sdl3::video::WindowContext;
 use std::fs;
 use std::path::{Path, PathBuf};
+use cgmath::num_traits::zero;
 
 pub struct Presentation {
     pub path: Option<PathBuf>,
@@ -228,6 +229,10 @@ impl Presentation {
         self.time = 0.0;
         self.frame_index = 0;
         self.path = Some(PathBuf::from(path));
+
+        self.pan = zero();
+        self.orientation.value = 0.0;
+        self.zoom = 1.0;
 
         if let Some(file) = path.file_name()
             && let Some(s) = file.to_str()

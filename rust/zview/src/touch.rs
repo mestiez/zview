@@ -1,8 +1,5 @@
 use crate::presentation::Presentation;
-use cgmath::{
-    EuclideanSpace, MetricSpace, Point3, Rad,
-    Transform, Vector2, Zero,
-};
+use cgmath::{EuclideanSpace, MetricSpace, Point3, Rad, Transform, Vector2, Zero};
 use sdl3::touch::Finger;
 
 pub struct TouchState {
@@ -33,7 +30,7 @@ impl TouchState {
     fn get_canvas_fingers(
         screen_finger_1: Vector2<f32>,
         screen_finger_2: Vector2<f32>,
-        state: &Presentation
+        state: &Presentation,
     ) -> (Vector2<f32>, Vector2<f32>, Vector2<f32>) {
         let f1 = state
             .screen_to_canvas

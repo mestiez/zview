@@ -1,17 +1,17 @@
 use crate::context::Context;
 use crate::smoothed::Smoothed;
+use cgmath::num_traits::zero;
 use cgmath::{Matrix4, Rad, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::{AnimationDecoder, DynamicImage, EncodableLayout, Frames, ImageFormat, ImageReader};
 use sdl3::pixels::PixelFormat;
-use sdl3::render::{Texture, TextureCreator};
+use sdl3::render::{ScaleMode, Texture, TextureCreator};
 use sdl3::surface::Surface;
 use sdl3::video::WindowContext;
 use std::fs;
 use std::path::{Path, PathBuf};
-use cgmath::num_traits::zero;
 
 pub struct Presentation {
     pub path: Option<PathBuf>,
@@ -26,6 +26,8 @@ pub struct Presentation {
 
     pub scale: Smoothed<Vector2<f32>>,
     pub orientation: Smoothed<f32>,
+    pub bg: Smoothed<f32>,
+    pub filter: ScaleMode,
 
     pub canvas_to_screen: Matrix4<f32>,
     pub screen_to_canvas: Matrix4<f32>,
@@ -60,6 +62,12 @@ impl Presentation {
                 smoothed: 0.0,
                 coefficient: 1e-8_f32,
             },
+            bg: Smoothed {
+                value: 0.0,
+                smoothed: 0.0,
+                coefficient: 1e-4_f32,
+            },
+            filter: ScaleMode::Linear,
 
             canvas_to_screen: Matrix4::identity(),
             screen_to_canvas: Matrix4::identity(),

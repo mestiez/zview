@@ -6,13 +6,14 @@ use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpa
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Keycode, Mod};
 use sdl3::pixels::{Color, FColor};
-use sdl3::render::{FPoint, Texture, Vertex, VertexIndices};
+use sdl3::render::{FPoint, ScaleMode, Texture, Vertex, VertexIndices};
 use sdl3::sys::stdinc::SDL_free;
 use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
 use std::path::Path;
 use std::slice;
 use std::time::Duration;
+use sdl3::gpu::Filter::{Linear, Nearest};
 
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let dt = Duration::from_secs_f32(1f32 / 120f32);
@@ -58,7 +59,10 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let mut event_pump = ctx.sdl.event_pump().unwrap();
 
     'running: loop {
-        ctx.canvas.set_draw_color(Color::BLACK);
+        {
+            let x = (state.bg.smoothed * state.bg.smoothed * u8::MAX as f32) as u8;
+            ctx.canvas.set_draw_color(Color::RGB(x, x, x));
+        }
         ctx.canvas.clear();
 
         let mut mouse_wheel = 0.0f64;
@@ -94,6 +98,15 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     }
                     Some(Keycode::Right) => {
                         state.cycle_next(ctx);
+                    }
+                    Some(Keycode::B) => {
+                        state.bg.value = if state.bg.value > 0.5 { 0.0 } else { 1.0 }
+                    }
+                    Some(Keycode::F) => {
+                        state.filter = match state.filter {
+                            ScaleMode::Linear => ScaleMode::Nearest,
+                            _ => ScaleMode::Linear,
+                        }
                     }
 
                     // flipping heck
@@ -199,10 +212,11 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
         state.update_transforms(window_size);
 
-        let mut tex: Option<&Texture> = None;
+        let mut tex: Option<&mut Texture> = None;
+        let texture_count = ctx.textures.len();
 
-        if ctx.textures.len() == 1 {
-            tex = Some(&ctx.textures[0]);
+        if texture_count == 1 {
+            tex = Some(&mut ctx.textures[0]);
         } else if ctx.textures.len() > 1 {
             let delay = ctx.delays[state.frame_index % ctx.delays.len()].numer_denom_ms();
             let s = 0.001 * (delay.0 as f32 / delay.1 as f32);
@@ -211,7 +225,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 state.frame_index += 1;
             }
 
-            tex = Some(&ctx.textures[state.frame_index % ctx.textures.len()]);
+            tex = Some(&mut ctx.textures[state.frame_index % texture_count]);
         }
 
         if let Some(tex) = tex {
@@ -242,6 +256,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 v.position.y = p.y;
             }
 
+            tex.set_scale_mode(state.filter);
             ctx.canvas
                 .render_geometry(&verts_transformed, Some(tex), idx)
                 .ok();
@@ -251,6 +266,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
         state.scale.update(dt_secs);
         state.orientation.update(dt_secs);
+        state.bg.update(dt_secs);
 
         state.sm_canvas_to_screen = if should_update_instantly {
             should_update_instantly = false;

@@ -1,5 +1,5 @@
 use crate::touch::TouchState;
-use image::{Delay, Frame};
+use image::Delay;
 use sdl3::render::{Texture, TextureCreator, WindowCanvas};
 use sdl3::video::{Window, WindowContext};
 use sdl3::{Sdl, VideoSubsystem};

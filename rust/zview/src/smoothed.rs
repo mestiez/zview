@@ -1,4 +1,4 @@
-use cgmath::{Angle, Rad, Vector2, VectorSpace};
+use cgmath::{Vector2, VectorSpace};
 
 pub struct Smoothed<T: Copy> {
     pub smoothed: T,

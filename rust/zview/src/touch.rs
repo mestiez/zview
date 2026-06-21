@@ -1,5 +1,5 @@
 use crate::presentation::Presentation;
-use cgmath::{EuclideanSpace, MetricSpace, Point3, Rad, Transform, Vector2, Zero};
+use cgmath::{EuclideanSpace, MetricSpace, Point3, Transform, Vector2, Zero};
 use sdl3::touch::Finger;
 
 pub struct TouchState {

@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::smoothed::Smoothed;
 use cgmath::num_traits::zero;
-use cgmath::{Matrix4, Rad, SquareMatrix, Vector2, Zero};
+use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
@@ -152,17 +152,17 @@ impl Presentation {
         }
     }
 
-    fn copy_image_to_texture<'a>(
+    pub fn copy_image_to_texture<'a>(
         w: u32,
         h: u32,
-        src: &[u8],
+        rgba32: &[u8],
         tex_creator: &'a TextureCreator<WindowContext>,
     ) -> Result<Texture<'a>, String> {
         let mut surface =
             Surface::new(w, h, PixelFormat::RGBA32).expect("Failed to create surface");
 
         surface.with_lock_mut(|buffer| {
-            buffer.copy_from_slice(src);
+            buffer.copy_from_slice(rgba32);
         });
 
         let tex = surface
@@ -172,7 +172,7 @@ impl Presentation {
         Ok(tex)
     }
 
-    fn set_animated(frames: Frames, ctx: &mut Context) {
+    fn direct_set_animated(frames: Frames, ctx: &mut Context) {
         for x in frames {
             if let Ok(frame) = x {
                 let delay = frame.delay();
@@ -191,12 +191,20 @@ impl Presentation {
         }
     }
 
-    fn set_single(img: DynamicImage, ctx: &mut Context) {
+    fn direct_set_single(img: DynamicImage, ctx: &mut Context) {
         let l = img.into_rgba8();
         let data = l.as_bytes();
         let tex = Self::copy_image_to_texture(l.width(), l.height(), data, ctx.tex_creator)
             .expect("Failed to copy image to texture");
         ctx.textures.push(tex);
+    }
+
+    pub fn reset_transform(&mut self) {
+        self.pan = zero();
+        self.zoom = 1.0;
+
+        self.orientation.value = 0.0;
+        self.scale.value = Vector2::new(1.0, 1.0);
     }
 
     pub fn set_texture(&mut self, path: &Path, ctx: &mut Context) -> Result<(), String> {
@@ -208,39 +216,35 @@ impl Presentation {
         match reader.format() {
             Some(ImageFormat::Gif) => {
                 let decoder = GifDecoder::new(reader.into_inner()).expect("Failed to decode gif");
-                Self::set_animated(decoder.into_frames(), ctx);
+                Self::direct_set_animated(decoder.into_frames(), ctx);
             }
             Some(ImageFormat::WebP) => {
                 let decoder = WebPDecoder::new(reader.into_inner()).expect("Failed to decode webp");
-                Self::set_animated(decoder.into_frames(), ctx);
+                Self::direct_set_animated(decoder.into_frames(), ctx);
             }
             Some(ImageFormat::Png) => {
                 let decoder = PngDecoder::new(reader.into_inner()).expect("Failed to decode webp");
                 match decoder.is_apng() {
                     Ok(true) => {
                         let apng = decoder.apng().expect("Failed to decode apng");
-                        Self::set_animated(apng.into_frames(), ctx);
+                        Self::direct_set_animated(apng.into_frames(), ctx);
                     }
                     _ => {
                         let decoded =
                             DynamicImage::from_decoder(decoder).expect("Failed to decode image");
-                        Self::set_single(decoded, ctx);
+                        Self::direct_set_single(decoded, ctx);
                     }
                 }
             }
             _ => {
                 let decoded = reader.decode().expect("Can't decode image");
-                Self::set_single(decoded, ctx);
+                Self::direct_set_single(decoded, ctx);
             }
         }
 
         self.time = 0.0;
         self.frame_index = 0;
         self.path = Some(PathBuf::from(path));
-
-        self.pan = zero();
-        self.orientation.value = 0.0;
-        self.zoom = 1.0;
 
         if let Some(file) = path.file_name()
             && let Some(s) = file.to_str()

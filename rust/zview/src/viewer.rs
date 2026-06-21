@@ -1,8 +1,8 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
 use cgmath::num_traits::FloatConst;
-use cgmath::num_traits::real::Real;
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
+use image::{EncodableLayout, ImageFormat};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Keycode, Mod};
 use sdl3::pixels::{Color, FColor};
@@ -10,10 +10,10 @@ use sdl3::render::{FPoint, ScaleMode, Texture, Vertex, VertexIndices};
 use sdl3::sys::stdinc::SDL_free;
 use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
+use std::ffi::{CStr, CString};
 use std::path::Path;
-use std::slice;
 use std::time::Duration;
-use sdl3::gpu::Filter::{Linear, Nearest};
+use std::{fs, slice};
 
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let dt = Duration::from_secs_f32(1f32 / 120f32);
@@ -92,33 +92,47 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 // keybinds
                 Event::KeyDown {
                     keycode, keymod, ..
-                } => match keycode {
-                    Some(Keycode::Left) => {
+                } => match (keycode, keymod) {
+                    (Some(Keycode::Left), Mod::NOMOD) => {
                         state.cycle_prev(ctx);
+                        state.reset_transform();
+                        should_update_instantly = true;
                     }
-                    Some(Keycode::Right) => {
+                    (Some(Keycode::Right), Mod::NOMOD) => {
                         state.cycle_next(ctx);
+                        state.reset_transform();
+                        should_update_instantly = true;
                     }
-                    Some(Keycode::B) => {
+                    (Some(Keycode::B), Mod::NOMOD) => {
                         state.bg.value = if state.bg.value > 0.5 { 0.0 } else { 1.0 }
                     }
-                    Some(Keycode::F) => {
+                    (Some(Keycode::F), Mod::NOMOD) => {
                         state.filter = match state.filter {
                             ScaleMode::Linear => ScaleMode::Nearest,
                             _ => ScaleMode::Linear,
                         }
                     }
+                    (Some(Keycode::Home), Mod::NOMOD) | (Some(Keycode::Backspace), Mod::NOMOD) => {
+                        state.reset_transform();
+                    }
+                    (Some(Keycode::F5), Mod::NOMOD) => {
+                        let p = state.path.clone();
+                        if let Some(path) = &p {
+                            state.bg.smoothed = 1.0 - state.bg.smoothed;
+                            state.set_texture(path.as_path(), ctx).ok();
+                        }
+                    }
 
                     // flipping heck
-                    Some(Keycode::H) => {
+                    (Some(Keycode::H), Mod::NOMOD) => {
                         state.scale.value.x *= -1.0;
                     }
-                    Some(Keycode::V) => {
+                    (Some(Keycode::V), Mod::NOMOD) => {
                         state.scale.value.y *= -1.0;
                     }
 
                     // rotate
-                    Some(Keycode::R) => {
+                    (Some(Keycode::R), Mod::NOMOD) => {
                         let half_pi = f32::FRAC_PI_2();
 
                         state.orientation.value += if keymod.contains(Mod::LSHIFTMOD) {
@@ -131,6 +145,19 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         state.orientation.value =
                             (state.orientation.value / half_pi).round() * half_pi
                     }
+
+                    // clipboard shit
+                    (Some(Keycode::V), Mod::LCTRLMOD) => {
+                        let clipboard = ctx.video.clipboard();
+                        if paste_from_clipboard(state, ctx).is_err() {
+                            if let Ok(text) = clipboard.clipboard_text() {
+                                if fs::exists(&text).unwrap_or(false) {
+                                    state.set_texture(Path::new(&text), ctx).ok();
+                                    state.reset_transform();
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 },
 
@@ -138,7 +165,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 Event::DropFile { filename, .. } => {
                     println!("File: {}", filename);
                     match state.set_texture(filename.as_ref(), ctx) {
-                        Ok(_) => (),
+                        Ok(_) => state.reset_transform(),
                         Err(e) => eprintln!("{}", e),
                     }
                 }
@@ -203,7 +230,6 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     SDL_free(ptr as _);
 
                     if ctx.touch.update(fingers, state, window_size) {
-                        should_update_instantly = true;
                         break;
                     }
                 }
@@ -279,5 +305,52 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
         state.time += dt_secs;
         std::thread::sleep(dt);
+    }
+}
+
+fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(), String> {
+    unsafe {
+        let mut size = 0_usize;
+        let mimes_ptr = sdl3::sys::clipboard::SDL_GetClipboardMimeTypes(&mut size);
+        let formats = slice::from_raw_parts(mimes_ptr, size)
+            .iter()
+            .filter_map(|mime| ImageFormat::from_mime_type(CStr::from_ptr(*mime).to_str().unwrap()))
+            .collect::<Vec<_>>();
+        SDL_free(mimes_ptr as _);
+
+        let mut result: Result<(), String> = Err("Failed to load image from clipboard".to_string());
+        for format in formats {
+            let mime = format.to_mime_type();
+            let mime_cstr = CString::new(mime.to_string()).unwrap();
+            let data = sdl3::sys::clipboard::SDL_GetClipboardData(mime_cstr.into_raw(), &mut size);
+            if data != std::ptr::null_mut() && size > 0 {
+                // yay we have some data :)
+                let buffer = slice::from_raw_parts(data as *mut u8, size);
+                result = match image::load_from_memory_with_format(&buffer, format) {
+                    Ok(img) => {
+                        // state.set_texture()
+                        let rgba = img.into_rgba8();
+
+                        Presentation::copy_image_to_texture(
+                            rgba.width(),
+                            rgba.height(),
+                            rgba.as_bytes(),
+                            ctx.tex_creator,
+                        )
+                        .and_then(|tex| {
+                            ctx.textures.clear();
+                            ctx.textures.push(tex);
+                            state.path = None;
+                            Ok(())
+                        })
+                    }
+                    _ => Err("Failed to load image".to_string()),
+                };
+            }
+            SDL_free(data);
+            break;
+        }
+
+        result
     }
 }

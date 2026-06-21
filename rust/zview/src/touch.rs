@@ -76,6 +76,23 @@ impl TouchState {
                 let dst = Vector2::distance(screen_finger_1, screen_finger_2);
                 let ratio = dst / self.initial_distance;
                 state.zoom = self.initial_zoom * ratio;
+                
+                // TODO rotation would be cool
+                // midpoint is actually useless.
+                //
+                // we constrain the pan to one finger and use the other 
+                // finger to figure out zoom and rotation.
+                //
+                // the ultimate goal is obviously to ensure that 
+                // both fingers remain fixed in canvas space.
+                //
+                // pan logic becomes simpler.
+                //
+                // zoom logic stays the same.
+                //
+                // rotation logic is mysterious to me. i think we should
+                // rotate before everything else and then figure out how to pan and zoom
+                // to ensure positions remain fixed
 
                 return true;
             } else {

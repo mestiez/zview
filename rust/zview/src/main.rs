@@ -9,11 +9,12 @@ use crate::presentation::Presentation;
 use crate::touch::TouchState;
 use crate::viewer::run;
 use std::env;
+use std::path::Path;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    for arg in args {
+    for arg in &args {
         if arg.starts_with('-') {
             match arg.as_ref() {
                 "-v" | "--version" => println!("v{}", env!("CARGO_PKG_VERSION")),
@@ -65,7 +66,7 @@ Options:
 
     let mut state = Presentation::new();
     run(
-        Some("/home/mestiez/pictures/ICS/Nia-AwayTrs.gif".as_ref()),
+        if args.len() > 1 { Some(Path::new(&args[1])) } else { None },
         &mut state,
         &mut ctx,
     );

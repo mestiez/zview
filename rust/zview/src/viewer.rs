@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use cgmath::num_traits::FloatConst;
-use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
+use cgmath::num_traits::{FloatConst, zero};
+use cgmath::{EuclideanSpace, Matrix3, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use image::{EncodableLayout, ImageFormat};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Keycode, Mod};
@@ -12,13 +12,10 @@ use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
 use std::ffi::{CStr, CString};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{fs, slice};
 
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
-    let dt = Duration::from_secs_f32(1f32 / 120f32);
-    let dt_secs = dt.as_secs_f32();
-
     if let Some(path) = &path {
         match state.set_texture(path, ctx) {
             Ok(_) => (),
@@ -58,11 +55,18 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     ctx.canvas.present();
     let mut event_pump = ctx.sdl.event_pump().unwrap();
 
+    let mut clock = 0.0_f32;
+    let mut frame_clock = Instant::now();
+    let mut frame_index = 0_usize;
+
+    let mut dt = Duration::new(0, 0);
+    let mut dt_secs = 0.0_f32;
+
     'running: loop {
-        {
+        ctx.canvas.set_draw_color({
             let x = (state.bg.smoothed * state.bg.smoothed * u8::MAX as f32) as u8;
-            ctx.canvas.set_draw_color(Color::RGB(x, x, x));
-        }
+            Color::RGB(x, x, x)
+        });
         ctx.canvas.clear();
 
         let mut mouse_wheel = 0.0f64;
@@ -120,6 +124,16 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         if let Some(path) = &p {
                             state.bg.smoothed = 1.0 - state.bg.smoothed;
                             state.set_texture(path.as_path(), ctx).ok();
+                        }
+                    }
+                    (Some(Keycode::Period), Mod::NOMOD) => {
+                        state.autofit = !state.autofit;
+                    }
+                    (Some(Keycode::W), Mod::NOMOD) => {
+                        let m_w = ctx.textures.iter().map(|t| t.width()).max();
+                        let m_h = ctx.textures.iter().map(|t| t.height()).max();
+                        if let (Some(w), Some(h)) = (m_w, m_h) && ctx.get_window_mut().set_size(w, h).is_ok() {
+                            state.reset_transform();
                         }
                     }
 
@@ -192,6 +206,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 if state.mouse_down_frames > 1 {
                     state.pan -= delta.xy().to_vec() / state.zoom;
                 }
+
+                state.autofit = false;
             } else {
                 state.mouse_down_frames = 0;
             }
@@ -205,12 +221,15 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 let cursor_after = state.screen_to_canvas.transform_point(m).xy().to_vec();
                 let d = cursor_before - cursor_after;
                 state.pan += d;
+
+                state.autofit = false;
             }
 
             state.update_transforms(window_size);
+
             for touch_id in sdl3::touch::num_touch_devices() {
                 unsafe {
-                    let mut finger_count = 0;
+                    let mut finger_count = 0i32;
                     let ptr = SDL_GetTouchFingers(SDL_TouchID::from(touch_id), &mut finger_count);
 
                     let fingers: Vec<Finger> = {
@@ -230,13 +249,12 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     SDL_free(ptr as _);
 
                     if ctx.touch.update(fingers, state, window_size) {
+                        state.autofit = false;
                         break;
                     }
                 }
             }
         }
-
-        state.update_transforms(window_size);
 
         let mut tex: Option<&mut Texture> = None;
         let texture_count = ctx.textures.len();
@@ -244,20 +262,42 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         if texture_count == 1 {
             tex = Some(&mut ctx.textures[0]);
         } else if ctx.textures.len() > 1 {
-            let delay = ctx.delays[state.frame_index % ctx.delays.len()].numer_denom_ms();
-            let s = 0.001 * (delay.0 as f32 / delay.1 as f32);
-            if state.time > s {
-                state.time = 0.0;
-                state.frame_index += 1;
+            tex = Some(&mut ctx.textures[state.animated_frame_index % texture_count]);
+            let delay = ctx.delays[state.animated_frame_index % texture_count].numer_denom_ms();
+            let s = (delay.0 as f32 / delay.1 as f32) / 1000.0;
+
+            while state.animated_timer > s {
+                state.animated_frame_index += 1;
+                state.animated_timer -= s;
             }
 
-            tex = Some(&mut ctx.textures[state.frame_index % texture_count]);
+            state.animated_timer += dt_secs;
         }
 
         if let Some(tex) = tex {
             let tex_w = tex.width() as f32;
             let tex_h = tex.height() as f32;
             let tex_size = Vector2::new(tex_w, tex_h);
+
+            // autofit logic goes here
+            if state.autofit {
+                let transformed_size = Matrix4::from_angle_z(Rad(state.orientation.value))
+                    .transform_vector(tex_size.extend(0.0))
+                    .xy();
+
+                let aspect_ratio = transformed_size.y / transformed_size.x;
+
+                if window_size.y / window_size.x < aspect_ratio {
+                    state.zoom = window_size.y / transformed_size.y;
+                } else {
+                    state.zoom = window_size.x / transformed_size.x;
+                }
+
+                state.pan = zero();
+                // should_update_instantly = true;
+            }
+
+            state.update_transforms(window_size);
 
             ctx.canvas.set_draw_color(Color::WHITE);
 
@@ -290,6 +330,10 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
         ctx.canvas.present();
 
+        dt = frame_clock.elapsed();
+        dt_secs = dt.as_secs_f32();
+        frame_clock = Instant::now();
+
         state.scale.update(dt_secs);
         state.orientation.update(dt_secs);
         state.bg.update(dt_secs);
@@ -303,8 +347,34 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             state.sm_canvas_to_screen.lerp(state.canvas_to_screen, f)
         };
 
-        state.time += dt_secs;
-        std::thread::sleep(dt);
+        let target_frame_time_secs = {
+            const FALLBACK: f32 = 1.0 / 300.0;
+            if let Ok(display) = ctx.get_window().get_display()
+                && let Ok(mode) = display.get_mode()
+            {
+                if mode.refresh_rate_numerator > 0 {
+                    mode.refresh_rate_denominator as f32 / mode.refresh_rate_numerator as f32
+                } else {
+                    // reported mode has invalid refresh rate...
+                    FALLBACK
+                }
+            } else {
+                // no display found (???)
+                FALLBACK
+            }
+        };
+        let r = target_frame_time_secs - frame_clock.elapsed().as_secs_f32();
+        if r > 0.0 {
+            std::thread::sleep(Duration::from_secs_f32(r));
+        }
+
+        clock += dt_secs;
+        frame_index += 1;
+        if clock > 1.0 {
+            println!("{frame_index} FPS");
+            frame_index = 0;
+            clock = 0.0;
+        }
     }
 }
 
@@ -324,11 +394,9 @@ fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(
             let mime_cstr = CString::new(mime.to_string()).unwrap();
             let data = sdl3::sys::clipboard::SDL_GetClipboardData(mime_cstr.into_raw(), &mut size);
             if data != std::ptr::null_mut() && size > 0 {
-                // yay we have some data :)
                 let buffer = slice::from_raw_parts(data as *mut u8, size);
                 result = match image::load_from_memory_with_format(&buffer, format) {
                     Ok(img) => {
-                        // state.set_texture()
                         let rgba = img.into_rgba8();
 
                         Presentation::copy_image_to_texture(

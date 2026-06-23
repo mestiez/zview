@@ -66,7 +66,11 @@ Options:
 
     let mut state = Presentation::new();
     run(
-        if args.len() > 1 { Some(Path::new(&args[1])) } else { None },
+        if args.len() > 1 {
+            Some(Path::new(&args[1]))
+        } else {
+            None
+        },
         &mut state,
         &mut ctx,
     );

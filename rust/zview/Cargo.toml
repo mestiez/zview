@@ -5,5 +5,12 @@ edition = "2024"
 
 [dependencies]
 cgmath = {version = "0.18.0", features = ["swizzle"]}
+hjkl-clipboard = "0.32.0"
 image = "0.25.10"
 sdl3 = "0.18.4"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"

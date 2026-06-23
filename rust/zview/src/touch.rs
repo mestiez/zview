@@ -1,6 +1,6 @@
 use crate::presentation::Presentation;
 use cgmath::num_traits::zero;
-use cgmath::{EuclideanSpace, InnerSpace, Matrix4, MetricSpace, Point3, Transform, Vector2, Zero};
+use cgmath::{EuclideanSpace, MetricSpace, Point3, Transform, Vector2};
 use sdl3::touch::Finger;
 
 pub struct TouchState {
@@ -90,7 +90,7 @@ impl TouchState {
                 // pan
                 state.update_transforms(window_size);
                 state.pan += {
-                    let (f1, f2) =
+                    let (f1, _) =
                         Self::get_canvas_fingers(screen_finger_1, screen_finger_2, &state);
                     self.initial_canvas_positions[0] - f1
                 };

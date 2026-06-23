@@ -1,8 +1,9 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use cgmath::num_traits::{FloatConst, zero};
-use cgmath::{EuclideanSpace, Matrix3, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
-use image::{EncodableLayout, ImageFormat};
+use cgmath::num_traits::{zero, FloatConst};
+use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
+use hjkl_clipboard::{Clipboard, MimeType, Selection};
+use image::{DynamicImage, EncodableLayout, ImageFormat, ImageReader};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Keycode, Mod};
 use sdl3::pixels::{Color, FColor};
@@ -11,6 +12,7 @@ use sdl3::sys::stdinc::SDL_free;
 use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
 use std::ffi::{CStr, CString};
+use std::io::Cursor;
 use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{fs, slice};
@@ -59,7 +61,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let mut frame_clock = Instant::now();
     let mut frame_index = 0_usize;
 
-    let mut dt = Duration::new(0, 0);
+    let mut dt: Duration;
     let mut dt_secs = 0.0_f32;
 
     'running: loop {
@@ -132,7 +134,9 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     (Some(Keycode::W), Mod::NOMOD) => {
                         let m_w = ctx.textures.iter().map(|t| t.width()).max();
                         let m_h = ctx.textures.iter().map(|t| t.height()).max();
-                        if let (Some(w), Some(h)) = (m_w, m_h) && ctx.get_window_mut().set_size(w, h).is_ok() {
+                        if let (Some(w), Some(h)) = (m_w, m_h)
+                            && ctx.get_window_mut().set_size(w, h).is_ok()
+                        {
                             state.reset_transform();
                         }
                     }
@@ -162,6 +166,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
                     // clipboard shit
                     (Some(Keycode::V), Mod::LCTRLMOD) => {
+                        // paste
                         let clipboard = ctx.video.clipboard();
                         if paste_from_clipboard(state, ctx).is_err() {
                             if let Ok(text) = clipboard.clipboard_text() {
@@ -171,6 +176,10 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                                 }
                             }
                         }
+                    }
+                    (Some(Keycode::C), Mod::LCTRLMOD) => {
+                        // copy
+                        copy_to_clipboard(state);
                     }
                     _ => {}
                 },
@@ -378,22 +387,90 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     }
 }
 
+fn copy_to_clipboard(state: &mut Presentation) {
+    if let Ok(clipboard) = hjkl_clipboard::Clipboard::new()
+        && let Some(path) = &state.path
+    {
+        let mut result = false;
+
+        // text
+        // result |= clipboard
+        //     .set(
+        //         Selection::Clipboard,
+        //         MimeType::Text,
+        //         path.to_str().unwrap().as_bytes(),
+        //     )
+        //     .is_ok();
+        //
+        // result |= clipboard
+        //     .set_uri_list(Selection::Clipboard, &[Uri::File(path.to_owned())])
+        //     .is_ok();
+
+        if let Ok(dec) = ImageReader::open(path)
+            && let Ok(img) = dec.decode()
+        {
+            result |= write_to_clipboard(&clipboard, ImageFormat::Png, &img);
+        }
+
+        if result {
+            state.bg.smoothed = 1.0 - state.bg.smoothed;
+        }
+    }
+}
+
+/* TODO
+All this clipboard shit is fucked. All we need really is x11rb and provide the data manually.
+What we have now does not work reliably and comes with a load of bs that we don't need anyway.
+ */
+
+fn write_to_clipboard(clipboard: &Clipboard, format: ImageFormat, img: &DynamicImage) -> bool {
+    let mut dst = Vec::new();
+    match img.write_to(&mut Cursor::new(&mut dst), format) {
+        Ok(_) => {
+            let mime = format.to_mime_type().into();
+            match clipboard.set(Selection::Clipboard, MimeType::Custom(mime), &dst[..]) {
+                Ok(_) => true,
+                Err(e) => {
+                    println!(
+                        "Could not write to clipboard ({}): {}",
+                        format.to_mime_type(),
+                        e
+                    );
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            println!(
+                "Could not encode image for clipboard ({}): {}",
+                format.to_mime_type(),
+                e
+            );
+            false
+        }
+    }
+}
+
 fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(), String> {
     unsafe {
         let mut size = 0_usize;
         let mimes_ptr = sdl3::sys::clipboard::SDL_GetClipboardMimeTypes(&mut size);
+        if mimes_ptr.is_null() {
+            return Err("Could not get clipboard mime types".into());
+        }
+
         let formats = slice::from_raw_parts(mimes_ptr, size)
             .iter()
             .filter_map(|mime| ImageFormat::from_mime_type(CStr::from_ptr(*mime).to_str().unwrap()))
             .collect::<Vec<_>>();
         SDL_free(mimes_ptr as _);
 
-        let mut result: Result<(), String> = Err("Failed to load image from clipboard".to_string());
+        let mut result: Result<(), String> = Err("Failed to load image from clipboard".into());
         for format in formats {
             let mime = format.to_mime_type();
             let mime_cstr = CString::new(mime.to_string()).unwrap();
-            let data = sdl3::sys::clipboard::SDL_GetClipboardData(mime_cstr.into_raw(), &mut size);
-            if data != std::ptr::null_mut() && size > 0 {
+            let data = sdl3::sys::clipboard::SDL_GetClipboardData(mime_cstr.as_ptr(), &mut size);
+            if !data.is_null() && size > 0 {
                 let buffer = slice::from_raw_parts(data as *mut u8, size);
                 result = match image::load_from_memory_with_format(&buffer, format) {
                     Ok(img) => {
@@ -412,11 +489,13 @@ fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(
                             Ok(())
                         })
                     }
-                    _ => Err("Failed to load image".to_string()),
+                    _ => Err("Failed to load image".into()),
                 };
             }
             SDL_free(data);
-            break;
+            if result.is_ok() {
+                break;
+            }
         }
 
         result

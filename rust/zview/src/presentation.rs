@@ -91,9 +91,21 @@ impl Presentation {
     }
 
     pub fn ensure_dir(&mut self) {
-        if let Some(path) = &self.path
-            && let Some(parent) = path.parent()
-        {
+        if let Some(path) = &self.path {
+            let mut parent = None;
+
+            if path.is_dir() {
+                parent = Some(path.as_path());
+            } else {
+                parent = path.parent();
+            }
+
+            if parent.is_none() {
+                return;
+            }
+
+            let parent = parent.unwrap();
+
             if let Some(dir) = &self.dir
                 && dir.eq(parent)
             {
@@ -110,6 +122,7 @@ impl Presentation {
                 for file in p {
                     self.paths.push(PathBuf::from(file.unwrap().path()));
                 }
+                self.paths.sort();
             }
         } else {
             self.dir = None;
@@ -227,81 +240,103 @@ impl Presentation {
     }
 
     pub fn set_texture(&mut self, path: &Path, ctx: &mut Context) -> Result<(), String> {
-        self.path = None;
+        let mut path = path.to_path_buf();
+        
+        if path.is_dir() && let Ok(dir) = path.read_dir()
+        {
+            for file in dir.filter_map(Result::ok) {
+                path = file.path();
+                break;
+            }
+        }
+        
+        self.path = Some(path.clone());
+        self.animated_frame_index = 0;
         ctx.textures.clear();
         ctx.delays.clear();
 
-        if let Ok(reader) = ImageReader::open(path) {
-            match reader.format() {
-                Some(ImageFormat::Gif) => {
-                    if let Ok(decoder) = GifDecoder::new(reader.into_inner()) {
-                        Self::direct_set_animated(decoder.into_frames(), ctx);
-                    } else {
-                        return Err("Failed to decode gif".to_string());
-                    }
-                }
-                Some(ImageFormat::WebP) => {
-                    if let Ok(decoder) = WebPDecoder::new(reader.into_inner()) {
-                        if decoder.has_animation() {
+        ctx.canvas
+            .window_mut()
+            .set_title(&format!("{} - loading...", env!("CARGO_PKG_NAME")))
+            .ok();
+
+        match ImageReader::open(&path) {
+            Ok(reader) => {
+                // TODO better error handling
+                match reader.format() {
+                    Some(ImageFormat::Gif) => {
+                        if let Ok(decoder) = GifDecoder::new(reader.into_inner()) {
                             Self::direct_set_animated(decoder.into_frames(), ctx);
-                        } else if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                        } else {
+                            return Err("Failed to decode gif".to_string());
+                        }
+                    }
+                    Some(ImageFormat::WebP) => {
+                        if let Ok(decoder) = WebPDecoder::new(reader.into_inner()) {
+                            if decoder.has_animation() {
+                                Self::direct_set_animated(decoder.into_frames(), ctx);
+                            } else if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                Self::direct_set_single(decoded, ctx);
+                            } else {
+                                return Err("Failed to decode static webp".to_string());
+                            }
+                        } else {
+                            return Err("Failed to decode webp".to_string());
+                        }
+                    }
+                    Some(ImageFormat::Png) => {
+                        if let Ok(decoder) = PngDecoder::new(reader.into_inner()) {
+                            match decoder.is_apng() {
+                                Ok(true) => {
+                                    if let Ok(apng) = decoder.apng() {
+                                        Self::direct_set_animated(apng.into_frames(), ctx);
+                                    } else {
+                                        return Err("Failed to decode animated png".to_string());
+                                    }
+                                }
+                                _ => {
+                                    if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                        Self::direct_set_single(decoded, ctx);
+                                    } else {
+                                        return Err("Failed to decode png".to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        if let Ok(decoded) = reader.decode() {
                             Self::direct_set_single(decoded, ctx);
                         } else {
-                            return Err("Failed to decode static webp".to_string());
-                        }
-                    } else {
-                        return Err("Failed to decode webp".to_string());
-                    }
-                }
-                Some(ImageFormat::Png) => {
-                    if let Ok(decoder) = PngDecoder::new(reader.into_inner()) {
-                        match decoder.is_apng() {
-                            Ok(true) => {
-                                if let Ok(apng) = decoder.apng() {
-                                    Self::direct_set_animated(apng.into_frames(), ctx);
-                                } else {
-                                    return Err("Failed to decode animated png".to_string());
-                                }
-                            }
-                            _ => {
-                                if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
-                                    Self::direct_set_single(decoded, ctx);
-                                } else {
-                                    return Err("Failed to decode png".to_string());
-                                }
-                            }
+                            return Err("Failed to decode image".to_string());
                         }
                     }
                 }
-                _ => {
-                    if let Ok(decoded) = reader.decode() {
-                        Self::direct_set_single(decoded, ctx);
-                    } else {
-                        return Err("Failed to decode image".to_string());
-                    }
+
+                if let Some(file) = path.file_name()
+                    && let Some(s) = file.to_str()
+                {
+                    ctx.canvas
+                        .window_mut()
+                        .set_title(&format!("{} - {}", env!("CARGO_PKG_NAME"), s))
+                        .ok();
+                } else {
+                    ctx.canvas
+                        .window_mut()
+                        .set_title(&format!("{}", env!("CARGO_PKG_NAME")))
+                        .ok();
                 }
+
+                Ok(())
             }
-        } else {
-            return Err("Failed to open image".to_string());
+
+            Err(error) => {
+                ctx.canvas
+                    .window_mut()
+                    .set_title(&format!("{}", env!("CARGO_PKG_NAME")))
+                    .ok();
+                Err(format!("Failed to open image: {error}"))
+            }
         }
-
-        self.animated_frame_index = 0;
-        self.path = Some(PathBuf::from(path));
-
-        if let Some(file) = path.file_name()
-            && let Some(s) = file.to_str()
-        {
-            ctx.canvas
-                .window_mut()
-                .set_title(&format!("{} - {}", env!("CARGO_PKG_NAME"), s))
-                .ok();
-        } else {
-            ctx.canvas
-                .window_mut()
-                .set_title(&format!("{}", env!("CARGO_PKG_NAME")))
-                .ok();
-        }
-
-        Ok(())
     }
 }

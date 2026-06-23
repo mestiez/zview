@@ -11,6 +11,14 @@ use crate::viewer::run;
 use std::env;
 use std::path::Path;
 
+/* Things I would like to implement:
+    - Infinite tiling
+    - Fine touchscreen rotation
+    - HDR support (tonemapping selector)
+    - Sprite sheet support
+    - Auto-play sequence (adjustable fps)
+ */
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 

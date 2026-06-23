@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use cgmath::num_traits::{zero, FloatConst};
+use cgmath::num_traits::{FloatConst, zero};
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use hjkl_clipboard::{Clipboard, MimeType, Selection};
 use image::{DynamicImage, EncodableLayout, ImageFormat, ImageReader};
@@ -292,7 +292,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             if state.autofit {
                 let transformed_size = Matrix4::from_angle_z(Rad(state.orientation.value))
                     .transform_vector(tex_size.extend(0.0))
-                    .xy();
+                    .xy()
+                    .map(|x| x.abs());
 
                 let aspect_ratio = transformed_size.y / transformed_size.x;
 
@@ -303,10 +304,26 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 }
 
                 state.pan = zero();
-                // should_update_instantly = true;
             }
 
             state.update_transforms(window_size);
+
+            if should_update_instantly {
+                should_update_instantly = false;
+                state.scale.smoothed = state.scale.value;
+                state.orientation.smoothed = state.orientation.value;
+                state.sm_canvas_to_screen = state.canvas_to_screen;
+            } else {
+                state.scale.update(dt_secs);
+                state.orientation.update(dt_secs);
+
+                state.sm_canvas_to_screen = {
+                    const COEFFICIENT: f32 = 1e-13;
+                    let f = 1.0 - COEFFICIENT.powf(dt_secs);
+                    state.sm_canvas_to_screen.lerp(state.canvas_to_screen, f)
+                };
+            }
+            state.bg.update(dt_secs);
 
             ctx.canvas.set_draw_color(Color::WHITE);
 
@@ -342,19 +359,6 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         dt = frame_clock.elapsed();
         dt_secs = dt.as_secs_f32();
         frame_clock = Instant::now();
-
-        state.scale.update(dt_secs);
-        state.orientation.update(dt_secs);
-        state.bg.update(dt_secs);
-
-        state.sm_canvas_to_screen = if should_update_instantly {
-            should_update_instantly = false;
-            state.canvas_to_screen
-        } else {
-            const COEFFICIENT: f32 = 1e-13;
-            let f = 1.0 - COEFFICIENT.powf(dt_secs);
-            state.sm_canvas_to_screen.lerp(state.canvas_to_screen, f)
-        };
 
         let target_frame_time_secs = {
             const FALLBACK: f32 = 1.0 / 300.0;

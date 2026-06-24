@@ -1,17 +1,19 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
+use crate::text::{BdfFont, FontTextureAtlas};
 use cgmath::num_traits::{FloatConst, zero};
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use hjkl_clipboard::{Clipboard, MimeType, Selection};
 use image::{DynamicImage, EncodableLayout, ImageFormat, ImageReader};
 use sdl3::event::{Event, WindowEvent};
-use sdl3::keyboard::{Keycode, Mod};
+use sdl3::keyboard::{Keycode, Mod, Scancode};
 use sdl3::pixels::{Color, FColor};
-use sdl3::render::{FPoint, ScaleMode, Texture, Vertex, VertexIndices};
+use sdl3::rect::Rect;
+use sdl3::render::{BlendMode, FPoint, FRect, ScaleMode, Texture, Vertex, VertexIndices, WindowCanvas};
 use sdl3::sys::stdinc::SDL_free;
 use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::io::Cursor;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -53,6 +55,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let mut should_update_instantly = true;
 
     ctx.canvas.set_draw_color(Color::BLACK);
+    ctx.canvas.set_blend_mode(BlendMode::Blend);
     ctx.canvas.clear();
     ctx.canvas.present();
     let mut event_pump = ctx.sdl.event_pump().unwrap();
@@ -72,6 +75,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         ctx.canvas.clear();
 
         let mut mouse_wheel = 0.0f64;
+        let mut show_info = false;
 
         for event in event_pump.poll_iter() {
             match event {
@@ -195,6 +199,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 _ => {}
             }
         }
+
+        show_info = event_pump.keyboard_state().is_scancode_pressed(Scancode::I);
 
         let window_size = {
             let a = ctx.get_window().size_in_pixels();
@@ -352,6 +358,19 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             ctx.canvas
                 .render_geometry(&verts_transformed, Some(tex), idx)
                 .ok();
+
+            if show_info && !state.info.is_empty() {
+                ctx.canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
+                ctx.canvas.fill_rect(Rect::new(0,0,window_size.x as u32, window_size.y as u32)).ok();
+
+                draw_text(
+                    ctx.canvas,
+                    &state.font,
+                    state.info.as_str(),
+                    16,
+                    16,
+                );
+            }
         }
 
         ctx.canvas.present();
@@ -418,6 +437,36 @@ fn copy_to_clipboard(state: &mut Presentation) {
 
         if result {
             state.bg.smoothed = 1.0 - state.bg.smoothed;
+        }
+    }
+}
+
+fn draw_text(canvas: &mut WindowCanvas, atlas: &FontTextureAtlas, text: &str, x: i32, y: i32) {
+    let mut cursor = Vector2::new(x, y);
+
+    for char in text.chars() {
+        if char == '\n' {
+            cursor.x = x;
+            cursor.y += atlas.font.font_size as i32 + 5;
+        } else if !char.is_control()
+            && let Some(entry) = atlas.entries.get(&char)
+        {
+            let src = FRect::new(
+                entry.tex_rect.x as f32,
+                entry.tex_rect.y as f32,
+                entry.tex_rect.w as f32,
+                entry.tex_rect.h as f32,
+            );
+
+            let dst = FRect::new(
+                (cursor.x + entry.glyph.bounding_box.x) as f32,
+                (cursor.y + entry.glyph.bounding_box.y) as f32,
+                entry.glyph.bounding_box.w as f32,
+                entry.glyph.bounding_box.h as f32,
+            );
+
+            canvas.copy(&atlas.texture, src, dst).ok();
+            cursor += entry.glyph.advance;
         }
     }
 }

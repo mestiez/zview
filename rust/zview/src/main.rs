@@ -1,23 +1,25 @@
 mod context;
 mod presentation;
 mod smoothed;
+mod text;
 mod touch;
 mod viewer;
 
 use crate::context::Context;
 use crate::presentation::Presentation;
+use crate::text::{BdfFont, FontTextureAtlas};
 use crate::touch::TouchState;
 use crate::viewer::run;
 use std::env;
+use std::io::BufReader;
 use std::path::Path;
-
 /* Things I would like to implement:
-    - Infinite tiling
-    - Fine touchscreen rotation
-    - HDR support (tonemapping selector)
-    - Sprite sheet support
-    - Auto-play sequence (adjustable fps)
- */
+   - Infinite tiling
+   - Fine touchscreen rotation
+   - HDR support (tonemapping selector)
+   - Sprite sheet support
+   - Auto-play sequence (adjustable fps)
+*/
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -72,14 +74,19 @@ Options:
         touch: TouchState::new(),
     };
 
-    let mut state = Presentation::new();
+
+    let font = BdfFont::load(
+        &include_bytes!("./assets/haxor-12.bdf")[..], 
+        // will shit the bed if the font is invalid or whatever
+    );
+
     run(
         if args.len() > 1 {
             Some(Path::new(&args[1]))
         } else {
             None
         },
-        &mut state,
+        &mut Presentation::new(FontTextureAtlas::new(&font, ctx.tex_creator).unwrap()),
         &mut ctx,
     );
 }

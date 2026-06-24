@@ -1,20 +1,27 @@
 use crate::context::Context;
 use crate::smoothed::Smoothed;
+use crate::text::{BdfFont, FontTextureAtlas};
 use cgmath::num_traits::zero;
 use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
-use image::{AnimationDecoder, DynamicImage, EncodableLayout, Frames, ImageFormat, ImageReader};
+use image::{
+    AnimationDecoder, DynamicImage, EncodableLayout, Frames, ImageDecoder, ImageFormat, ImageReader,
+};
 use sdl3::pixels::PixelFormat;
 use sdl3::render::{ScaleMode, Texture, TextureCreator};
 use sdl3::surface::Surface;
 use sdl3::video::WindowContext;
+use std::fmt::{Display, write};
 use std::fs;
+use std::ops::Add;
 use std::path::{Path, PathBuf};
 
-pub struct Presentation {
+pub struct Presentation<'a> {
     pub path: Option<PathBuf>,
+    pub info: String,
+
     pub animated_frame_index: usize,
     pub animated_timer: f32,
 
@@ -36,17 +43,21 @@ pub struct Presentation {
 
     pub sm_canvas_to_screen: Matrix4<f32>,
 
+    pub font: FontTextureAtlas<'a>,
+
     dir: Option<PathBuf>,
     paths: Vec<PathBuf>,
 }
 
-impl Presentation {
-    pub fn new() -> Presentation {
+impl Presentation<'_> {
+    pub fn new(font: FontTextureAtlas) -> Presentation {
         Presentation {
-            animated_frame_index: 0,
-            animated_timer: 0.0,
             path: None,
             dir: None,
+            info: String::new(),
+
+            animated_frame_index: 0,
+            animated_timer: 0.0,
             paths: Vec::new(),
 
             prev_mouse: Vector2::zero(),
@@ -76,6 +87,8 @@ impl Presentation {
             screen_to_canvas: Matrix4::identity(),
 
             sm_canvas_to_screen: Matrix4::identity(),
+
+            font,
         }
     }
 
@@ -231,6 +244,15 @@ impl Presentation {
         }
     }
 
+    pub fn set_info(target: &mut String, name: &impl Display, decoder: &impl ImageDecoder) {
+        target.clear();
+        let d = decoder.dimensions();
+
+        target.push_str(format!("source: {}\n", name).as_str());
+        target.push_str(format!("dimensions: {}x{}\n", d.0, d.1).as_str());
+        target.push_str(format!("size: {}b\n", decoder.total_bytes()).as_str()); // TODO human readable byte size
+    }
+
     pub fn reset_transform(&mut self) {
         self.pan = zero();
         self.zoom = 1.0;
@@ -239,21 +261,33 @@ impl Presentation {
         self.scale.value = Vector2::new(1.0, 1.0);
     }
 
+    fn get_filename_lossy(p: &PathBuf) -> &str {
+        if let Some(p) = p.file_name() {
+            if let Some(s) = p.to_str() {
+                return s;
+            }
+        }
+
+        "raw"
+    }
+
     pub fn set_texture(&mut self, path: &Path, ctx: &mut Context) -> Result<(), String> {
         let mut path = path.to_path_buf();
-        
-        if path.is_dir() && let Ok(dir) = path.read_dir()
+
+        if path.is_dir()
+            && let Ok(dir) = path.read_dir()
         {
             for file in dir.filter_map(Result::ok) {
                 path = file.path();
                 break;
             }
         }
-        
+
         self.path = Some(path.clone());
         self.animated_frame_index = 0;
         ctx.textures.clear();
         ctx.delays.clear();
+        self.info.clear();
 
         ctx.canvas
             .window_mut()
@@ -266,6 +300,11 @@ impl Presentation {
                 match reader.format() {
                     Some(ImageFormat::Gif) => {
                         if let Ok(decoder) = GifDecoder::new(reader.into_inner()) {
+                            Self::set_info(
+                                &mut self.info,
+                                &Self::get_filename_lossy(&path),
+                                &decoder,
+                            );
                             Self::direct_set_animated(decoder.into_frames(), ctx);
                         } else {
                             return Err("Failed to decode gif".to_string());
@@ -273,6 +312,11 @@ impl Presentation {
                     }
                     Some(ImageFormat::WebP) => {
                         if let Ok(decoder) = WebPDecoder::new(reader.into_inner()) {
+                            Self::set_info(
+                                &mut self.info,
+                                &Self::get_filename_lossy(&path),
+                                &decoder,
+                            );
                             if decoder.has_animation() {
                                 Self::direct_set_animated(decoder.into_frames(), ctx);
                             } else if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
@@ -286,6 +330,11 @@ impl Presentation {
                     }
                     Some(ImageFormat::Png) => {
                         if let Ok(decoder) = PngDecoder::new(reader.into_inner()) {
+                            Self::set_info(
+                                &mut self.info,
+                                &Self::get_filename_lossy(&path),
+                                &decoder,
+                            );
                             match decoder.is_apng() {
                                 Ok(true) => {
                                     if let Ok(apng) = decoder.apng() {
@@ -305,8 +354,15 @@ impl Presentation {
                         }
                     }
                     _ => {
-                        if let Ok(decoded) = reader.decode() {
-                            Self::direct_set_single(decoded, ctx);
+                        if let Ok(decoder) = reader.into_decoder() {
+                            Self::set_info(
+                                &mut self.info,
+                                &Self::get_filename_lossy(&path),
+                                &decoder,
+                            );
+                            if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                Self::direct_set_single(decoded, ctx);
+                            }
                         } else {
                             return Err("Failed to decode image".to_string());
                         }

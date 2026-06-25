@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
-use crate::text::{BdfFont, FontTextureAtlas};
+use crate::text::FontTextureAtlas;
 use cgmath::num_traits::{FloatConst, zero};
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use hjkl_clipboard::{Clipboard, MimeType, Selection};
@@ -9,11 +9,13 @@ use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Keycode, Mod, Scancode};
 use sdl3::pixels::{Color, FColor};
 use sdl3::rect::Rect;
-use sdl3::render::{BlendMode, FPoint, FRect, ScaleMode, Texture, Vertex, VertexIndices, WindowCanvas};
+use sdl3::render::{
+    BlendMode, FPoint, FRect, ScaleMode, Texture, Vertex, VertexIndices, WindowCanvas,
+};
 use sdl3::sys::stdinc::SDL_free;
 use sdl3::sys::touch::{SDL_GetTouchFingers, SDL_TouchID};
 use sdl3::touch::Finger;
-use std::ffi::{CStr, CString, c_char};
+use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -75,7 +77,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         ctx.canvas.clear();
 
         let mut mouse_wheel = 0.0f64;
-        let mut show_info = false;
+        let show_info = event_pump.keyboard_state().is_scancode_pressed(Scancode::I);
 
         for event in event_pump.poll_iter() {
             match event {
@@ -123,12 +125,13 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         }
                     }
                     (Some(Keycode::Home), Mod::NOMOD) | (Some(Keycode::Backspace), Mod::NOMOD) => {
+                        state.autofit = false;
                         state.reset_transform();
                     }
                     (Some(Keycode::F5), Mod::NOMOD) => {
                         let p = state.path.clone();
                         if let Some(path) = &p {
-                            state.bg.smoothed = 1.0 - state.bg.smoothed;
+                            state.bg.smoothed = 0.5;
                             state.set_texture(path.as_path(), ctx).ok();
                         }
                     }
@@ -141,7 +144,9 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         if let (Some(w), Some(h)) = (m_w, m_h)
                             && ctx.get_window_mut().set_size(w, h).is_ok()
                         {
+                            ctx.get_window_mut().restore();
                             state.reset_transform();
+                            state.autofit = false;
                         }
                     }
 
@@ -192,15 +197,17 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 Event::DropFile { filename, .. } => {
                     println!("File: {}", filename);
                     match state.set_texture(filename.as_ref(), ctx) {
-                        Ok(_) => state.reset_transform(),
+                        Ok(_) => {
+                            state.reset_transform();
+                            state.autofit = true;
+                            should_update_instantly = true;
+                        }
                         Err(e) => eprintln!("{}", e),
                     }
                 }
                 _ => {}
             }
         }
-
-        show_info = event_pump.keyboard_state().is_scancode_pressed(Scancode::I);
 
         let window_size = {
             let a = ctx.get_window().size_in_pixels();
@@ -335,12 +342,12 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
             // final transformation
             let transform = state.sm_canvas_to_screen
+                * Matrix4::from_angle_z(Rad(state.orientation.smoothed))
                 * Matrix4::from_nonuniform_scale(
                     state.scale.smoothed.x,
                     state.scale.smoothed.y,
                     1.0,
                 )
-                * Matrix4::from_angle_z(Rad(state.orientation.smoothed))
                 * Matrix4::from_translation((tex_size * -0.5).extend(0.0))
                 * Matrix4::from_nonuniform_scale(tex_w, tex_h, 1.0);
 
@@ -361,15 +368,11 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
             if show_info && !state.info.is_empty() {
                 ctx.canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
-                ctx.canvas.fill_rect(Rect::new(0,0,window_size.x as u32, window_size.y as u32)).ok();
+                ctx.canvas
+                    .fill_rect(Rect::new(0, 0, window_size.x as u32, window_size.y as u32))
+                    .ok();
 
-                draw_text(
-                    ctx.canvas,
-                    &state.font,
-                    state.info.as_str(),
-                    16,
-                    16,
-                );
+                draw_text(ctx.canvas, &state.font, state.info.as_str(), 16, 16);
             }
         }
 
@@ -436,7 +439,7 @@ fn copy_to_clipboard(state: &mut Presentation) {
         }
 
         if result {
-            state.bg.smoothed = 1.0 - state.bg.smoothed;
+            state.bg.smoothed = 0.5;
         }
     }
 }

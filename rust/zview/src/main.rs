@@ -11,8 +11,8 @@ use crate::text::{BdfFont, FontTextureAtlas};
 use crate::touch::TouchState;
 use crate::viewer::run;
 use std::env;
-use std::io::BufReader;
 use std::path::Path;
+
 /* Things I would like to implement:
    - Infinite tiling
    - Fine touchscreen rotation
@@ -76,7 +76,7 @@ Options:
 
 
     let font = BdfFont::load(
-        &include_bytes!("./assets/haxor-12.bdf")[..], 
+        &include_bytes!("./assets/haxor-12.bdf")[..],
         // will shit the bed if the font is invalid or whatever
     );
 

@@ -56,7 +56,7 @@ impl<'a> FontTextureAtlas<'a> {
         const H: u32 = 128;
         const PADDING: u32 = 1;
 
-        let mut surface = Surface::new(W, H, PixelFormat::RGBA8888);
+        let surface = Surface::new(W, H, PixelFormat::RGBA8888);
         match surface {
             Ok(mut surface) => {
                 let texture = tex_creator.create_texture(surface.pixel_format(), Static, W, H);

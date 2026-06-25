@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::smoothed::Smoothed;
-use crate::text::{BdfFont, FontTextureAtlas};
+use crate::text::FontTextureAtlas;
 use cgmath::num_traits::zero;
 use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
 use image::codecs::gif::GifDecoder;
@@ -13,9 +13,7 @@ use sdl3::pixels::PixelFormat;
 use sdl3::render::{ScaleMode, Texture, TextureCreator};
 use sdl3::surface::Surface;
 use sdl3::video::WindowContext;
-use std::fmt::{Display, write};
 use std::fs;
-use std::ops::Add;
 use std::path::{Path, PathBuf};
 
 pub struct Presentation<'a> {
@@ -45,20 +43,21 @@ pub struct Presentation<'a> {
 
     pub font: FontTextureAtlas<'a>,
 
-    dir: Option<PathBuf>,
-    paths: Vec<PathBuf>,
+    // dir: Option<PathBuf>,
+    queue: Vec<PathBuf>,
+    queue_index: usize,
 }
 
 impl Presentation<'_> {
     pub fn new(font: FontTextureAtlas) -> Presentation {
         Presentation {
             path: None,
-            dir: None,
             info: String::new(),
+            queue: Vec::new(),
+            queue_index: 0,
 
             animated_frame_index: 0,
             animated_timer: 0.0,
-            paths: Vec::new(),
 
             prev_mouse: Vector2::zero(),
             mouse_down_frames: 0,
@@ -103,54 +102,53 @@ impl Presentation<'_> {
             .unwrap_or(Matrix4::identity());
     }
 
-    pub fn ensure_dir(&mut self) {
+    pub fn build_queue(&mut self) {
+        self.queue.clear();
+        self.queue_index = 0;
+
         if let Some(path) = &self.path {
-            let mut parent = None;
-
-            if path.is_dir() {
-                parent = Some(path.as_path());
-            } else {
-                parent = path.parent();
-            }
-
-            if parent.is_none() {
-                return;
-            }
-
-            let parent = parent.unwrap();
-
-            if let Some(dir) = &self.dir
-                && dir.eq(parent)
-            {
-                return;
-            }
-
-            // set dir
-            self.dir = Some(parent.to_path_buf());
-
-            // populate paths
-            let p = fs::read_dir(parent);
-            self.paths.clear();
-            if let Ok(p) = p {
-                for file in p {
-                    self.paths.push(PathBuf::from(file.unwrap().path()));
+            let parent = {
+                if path.is_dir() {
+                    Some(path)
+                } else if let Some(parent) = path.parent() {
+                    Some(&parent.to_path_buf())
+                } else {
+                    None
                 }
-                self.paths.sort();
+            };
+
+            if let Some(parent) = parent {
+                let p = fs::read_dir(parent);
+                self.queue.clear();
+                if let Ok(p) = p {
+                    for file in p {
+                        if let Ok(file) = file
+                            && let Ok(format) = ImageFormat::from_path(file.path())
+                            && format.can_read()
+                        {
+                            self.queue.push(PathBuf::from(file.path()));
+                        }
+                    }
+                    self.queue.sort();
+                    for i in 0..self.queue.len() {
+                        if self.queue[i].eq(path) {
+                            self.queue_index = i;
+                            break;
+                        }
+                    }
+                }
             }
-        } else {
-            self.dir = None;
-            self.paths.clear();
         }
     }
 
     pub fn cycle_next(&mut self, ctx: &mut Context) {
-        self.ensure_dir();
-        if self.paths.len() == 0 {
+        self.build_queue();
+        if self.queue.len() == 0 {
             return;
         }
 
         if let Some(path) = self.path.clone() {
-            let c = self.paths.clone();
+            let c = self.queue.clone();
             let mut paths = c.iter().cycle();
             let mut acc = false;
             for _ in 0..c.len() {
@@ -159,10 +157,12 @@ impl Presentation<'_> {
                 if acc {
                     let next = paths.next().unwrap();
                     match self.set_texture(next, ctx) {
-                        Ok(_) => break,
+                        Ok(_) => {
+                            break;
+                        }
                         Err(e) => {
                             eprintln!("{e}");
-                            // we do nothing and just skip to the next one
+                            // we d o nothing and just skip to the next one
                         }
                     }
                 }
@@ -173,13 +173,13 @@ impl Presentation<'_> {
     // TODO this is the same as cycle_next but with a rev() somewhere
     // so it would be cool if it can be generalised somehow
     pub fn cycle_prev(&mut self, ctx: &mut Context) {
-        self.ensure_dir();
-        if self.paths.len() == 0 {
+        self.build_queue();
+        if self.queue.len() == 0 {
             return;
         }
 
         if let Some(path) = self.path.clone() {
-            let c = self.paths.clone();
+            let c = self.queue.clone();
             let mut paths = c.iter().rev().cycle();
             let mut acc = false;
             for _ in 0..c.len() {
@@ -188,7 +188,9 @@ impl Presentation<'_> {
                 if acc {
                     let next = paths.next().unwrap();
                     match self.set_texture(next, ctx) {
-                        Ok(_) => break,
+                        Ok(_) => {
+                            break;
+                        }
                         Err(e) => {
                             eprintln!("{e}");
                             // we do nothing and just skip to the next one
@@ -244,31 +246,40 @@ impl Presentation<'_> {
         }
     }
 
-    pub fn set_info(target: &mut String, name: &impl Display, decoder: &impl ImageDecoder) {
-        target.clear();
-        let d = decoder.dimensions();
+    pub fn set_info_from_decoder(&mut self, decoder: &impl ImageDecoder) {
+        let ref mut target = self.info;
 
-        target.push_str(format!("source: {}\n", name).as_str());
+        target.clear();
+
+        target.push_str(format!("queue: {}/{}\n", self.queue_index + 1, self.queue.len()).as_str());
+
+        if let Some(path) = self.path.clone()
+            && let Ok(metadata) = fs::metadata(&path)
+        {
+            target.push_str(format!("source: {}\n", path.to_string_lossy()).as_str());
+            target.push_str(
+                format!("size: {}\n", human_readable_byte_count(metadata.len())).as_str(),
+            );
+        }
+
+        let d = decoder.dimensions();
         target.push_str(format!("dimensions: {}x{}\n", d.0, d.1).as_str());
-        target.push_str(format!("size: {}b\n", decoder.total_bytes()).as_str()); // TODO human readable byte size
+
+        fn human_readable_byte_count(b: u64) -> String {
+            if b >= 1000_000 {
+                return format!("{:.2} MB", b as f32 / 1000_000.0);
+            } else if b >= 1000 {
+                return format!("{:.2} kB", b as f32 / 1000.0);
+            }
+            format!("{} B", b)
+        }
     }
 
     pub fn reset_transform(&mut self) {
         self.pan = zero();
         self.zoom = 1.0;
-
         self.orientation.value = 0.0;
         self.scale.value = Vector2::new(1.0, 1.0);
-    }
-
-    fn get_filename_lossy(p: &PathBuf) -> &str {
-        if let Some(p) = p.file_name() {
-            if let Some(s) = p.to_str() {
-                return s;
-            }
-        }
-
-        "raw"
     }
 
     pub fn set_texture(&mut self, path: &Path, ctx: &mut Context) -> Result<(), String> {
@@ -284,15 +295,20 @@ impl Presentation<'_> {
         }
 
         self.path = Some(path.clone());
+        self.info.clear();
         self.animated_frame_index = 0;
+
+        self.build_queue();
+
         ctx.textures.clear();
         ctx.delays.clear();
-        self.info.clear();
 
         ctx.canvas
             .window_mut()
             .set_title(&format!("{} - loading...", env!("CARGO_PKG_NAME")))
             .ok();
+
+        println!("Loading {}", path.display());
 
         match ImageReader::open(&path) {
             Ok(reader) => {
@@ -300,11 +316,7 @@ impl Presentation<'_> {
                 match reader.format() {
                     Some(ImageFormat::Gif) => {
                         if let Ok(decoder) = GifDecoder::new(reader.into_inner()) {
-                            Self::set_info(
-                                &mut self.info,
-                                &Self::get_filename_lossy(&path),
-                                &decoder,
-                            );
+                            self.set_info_from_decoder(&decoder);
                             Self::direct_set_animated(decoder.into_frames(), ctx);
                         } else {
                             return Err("Failed to decode gif".to_string());
@@ -312,11 +324,7 @@ impl Presentation<'_> {
                     }
                     Some(ImageFormat::WebP) => {
                         if let Ok(decoder) = WebPDecoder::new(reader.into_inner()) {
-                            Self::set_info(
-                                &mut self.info,
-                                &Self::get_filename_lossy(&path),
-                                &decoder,
-                            );
+                            self.set_info_from_decoder(&decoder);
                             if decoder.has_animation() {
                                 Self::direct_set_animated(decoder.into_frames(), ctx);
                             } else if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
@@ -330,11 +338,7 @@ impl Presentation<'_> {
                     }
                     Some(ImageFormat::Png) => {
                         if let Ok(decoder) = PngDecoder::new(reader.into_inner()) {
-                            Self::set_info(
-                                &mut self.info,
-                                &Self::get_filename_lossy(&path),
-                                &decoder,
-                            );
+                            self.set_info_from_decoder(&decoder);
                             match decoder.is_apng() {
                                 Ok(true) => {
                                     if let Ok(apng) = decoder.apng() {
@@ -355,11 +359,7 @@ impl Presentation<'_> {
                     }
                     _ => {
                         if let Ok(decoder) = reader.into_decoder() {
-                            Self::set_info(
-                                &mut self.info,
-                                &Self::get_filename_lossy(&path),
-                                &decoder,
-                            );
+                            self.set_info_from_decoder(&decoder);
                             if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
                                 Self::direct_set_single(decoded, ctx);
                             }

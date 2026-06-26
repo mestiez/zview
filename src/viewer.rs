@@ -21,7 +21,6 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{fs, slice};
 
-
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     if let Some(path) = &path {
         match state.set_texture(path, ctx) {
@@ -343,6 +342,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             ctx.canvas.set_draw_color(Color::WHITE);
 
             // final transformation
+            let tiling = state.tiling.smoothed;
             let transform = state.sm_canvas_to_screen
                 * Matrix4::from_angle_z(Rad(state.orientation.smoothed))
                 * Matrix4::from_nonuniform_scale(
@@ -350,16 +350,14 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     state.scale.smoothed.y,
                     1.0,
                 )
-                * Matrix4::from_translation((tex_size * -0.5).extend(0.0))
-                * Matrix4::from_nonuniform_scale(tex_w, tex_h, 1.0);
+                * Matrix4::from_translation((tex_size * tiling * -0.5).extend(0.0))
+                * Matrix4::from_nonuniform_scale(tex_w * tiling, tex_h * tiling, 1.0);
 
-            let tiling = state.tiling.smoothed;
             for i in 0..verts.len() {
                 let v = &mut verts_transformed[i];
                 verts[i].clone_into(v);
 
                 let p = transform.transform_point(Point3::new(v.position.x, v.position.y, 0.0));
-
                 v.position.x = p.x;
                 v.position.y = p.y;
 
@@ -559,7 +557,7 @@ fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(
     }
 }
 
-fn fit_window(state: &mut Presentation, ctx: &mut Context){
+fn fit_window(state: &mut Presentation, ctx: &mut Context) {
     let m_w = ctx.textures.iter().map(|t| t.width()).max();
     let m_h = ctx.textures.iter().map(|t| t.height()).max();
     if let (Some(w), Some(h)) = (m_w, m_h)

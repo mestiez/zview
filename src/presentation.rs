@@ -83,7 +83,7 @@ impl Presentation<'_> {
             tiling: Smoothed {
                 value: 1.0,
                 smoothed: 1.0,
-                coefficient: 1e-4_f32,
+                coefficient: 1e-3_f32,
             },
             filter: ScaleMode::Linear,
             autofit: false,

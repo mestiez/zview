@@ -34,6 +34,7 @@ pub struct Presentation<'a> {
     pub scale: Smoothed<Vector2<f32>>,
     pub orientation: Smoothed<f32>,
     pub bg: Smoothed<f32>,
+    pub tiling: Smoothed<f32>,
     pub filter: ScaleMode,
 
     pub canvas_to_screen: Matrix4<f32>,
@@ -77,6 +78,11 @@ impl Presentation<'_> {
             bg: Smoothed {
                 value: 0.0,
                 smoothed: 0.0,
+                coefficient: 1e-4_f32,
+            },
+            tiling: Smoothed {
+                value: 1.0,
+                smoothed: 1.0,
                 coefficient: 1e-4_f32,
             },
             filter: ScaleMode::Linear,

@@ -14,7 +14,6 @@ use std::env;
 use std::path::Path;
 
 /* Things I would like to implement:
-   - Infinite tiling
    - Fine touchscreen rotation
    - HDR support (tonemapping selector)
    - Sprite sheet support

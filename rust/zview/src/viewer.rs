@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
 use crate::text::FontTextureAtlas;
-use cgmath::num_traits::{FloatConst, zero};
+use cgmath::num_traits::{zero, FloatConst};
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use hjkl_clipboard::{Clipboard, MimeType, Selection};
 use image::{DynamicImage, EncodableLayout, ImageFormat, ImageReader};
@@ -158,8 +158,16 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         state.scale.value.y *= -1.0;
                     }
 
+                    // tiling
+                    (Some(Keycode::T), Mod::LSHIFTMOD) => {
+                        state.tiling.value = (state.tiling.value - 2.0).max(1.0);
+                    }
+                    (Some(Keycode::T), Mod::NOMOD) => {
+                        state.tiling.value = (state.tiling.value + 2.0).min(17.0);
+                    }
+
                     // rotate
-                    (Some(Keycode::R), Mod::NOMOD) => {
+                    (Some(Keycode::R), Mod::LSHIFTMOD | Mod::RSHIFTMOD | Mod::NOMOD) => {
                         let half_pi = f32::FRAC_PI_2();
 
                         state.orientation.value += if keymod.contains(Mod::LSHIFTMOD) {
@@ -182,6 +190,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                                 if fs::exists(&text).unwrap_or(false) {
                                     state.set_texture(Path::new(&text), ctx).ok();
                                     state.reset_transform();
+                                    state.tiling.value = 0.0;
                                 }
                             }
                         }
@@ -325,9 +334,11 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 should_update_instantly = false;
                 state.scale.smoothed = state.scale.value;
                 state.orientation.smoothed = state.orientation.value;
+                state.tiling.smoothed = state.tiling.value;
                 state.sm_canvas_to_screen = state.canvas_to_screen;
             } else {
                 state.scale.update(dt_secs);
+                state.tiling.update(dt_secs);
                 state.orientation.update(dt_secs);
 
                 state.sm_canvas_to_screen = {
@@ -351,6 +362,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                 * Matrix4::from_translation((tex_size * -0.5).extend(0.0))
                 * Matrix4::from_nonuniform_scale(tex_w, tex_h, 1.0);
 
+            let tiling = state.tiling.smoothed;
             for i in 0..verts.len() {
                 let v = &mut verts_transformed[i];
                 verts[i].clone_into(v);
@@ -359,6 +371,12 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
                 v.position.x = p.x;
                 v.position.y = p.y;
+
+                v.tex_coord.x *= tiling;
+                v.tex_coord.y *= tiling;
+
+                v.tex_coord.x -= (tiling - 1.0) * 0.5;
+                v.tex_coord.y -= (tiling - 1.0) * 0.5;
             }
 
             tex.set_scale_mode(state.filter);

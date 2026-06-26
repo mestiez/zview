@@ -1,0 +1,404 @@
+use crate::context::Context;
+use crate::smoothed::Smoothed;
+use crate::text::FontTextureAtlas;
+use cgmath::num_traits::zero;
+use cgmath::{Matrix4, SquareMatrix, Vector2, Zero};
+use image::codecs::gif::GifDecoder;
+use image::codecs::png::PngDecoder;
+use image::codecs::webp::WebPDecoder;
+use image::{
+    AnimationDecoder, DynamicImage, EncodableLayout, Frames, ImageDecoder, ImageFormat, ImageReader,
+};
+use sdl3::pixels::PixelFormat;
+use sdl3::render::{ScaleMode, Texture, TextureCreator};
+use sdl3::surface::Surface;
+use sdl3::video::WindowContext;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub struct Presentation<'a> {
+    pub path: Option<PathBuf>,
+    pub info: String,
+
+    pub animated_frame_index: usize,
+    pub animated_timer: f32,
+
+    pub prev_mouse: Vector2<f32>,
+    pub mouse_down_frames: u32,
+
+    pub pan: Vector2<f32>,
+    pub zoom: f32,
+
+    pub autofit: bool,
+
+    pub scale: Smoothed<Vector2<f32>>,
+    pub orientation: Smoothed<f32>,
+    pub bg: Smoothed<f32>,
+    pub tiling: Smoothed<f32>,
+    pub filter: ScaleMode,
+
+    pub canvas_to_screen: Matrix4<f32>,
+    pub screen_to_canvas: Matrix4<f32>,
+
+    pub sm_canvas_to_screen: Matrix4<f32>,
+
+    pub font: FontTextureAtlas<'a>,
+
+    // dir: Option<PathBuf>,
+    queue: Vec<PathBuf>,
+    queue_index: usize,
+}
+
+impl Presentation<'_> {
+    pub fn new(font: FontTextureAtlas) -> Presentation {
+        Presentation {
+            path: None,
+            info: String::new(),
+            queue: Vec::new(),
+            queue_index: 0,
+
+            animated_frame_index: 0,
+            animated_timer: 0.0,
+
+            prev_mouse: Vector2::zero(),
+            mouse_down_frames: 0,
+
+            pan: Vector2::zero(),
+            zoom: 1.0,
+            scale: Smoothed {
+                value: Vector2::new(1.0, 1.0),
+                smoothed: Vector2::new(1.0, 1.0),
+                coefficient: 1e-8_f32,
+            },
+            orientation: Smoothed {
+                value: 0.0,
+                smoothed: 0.0,
+                coefficient: 1e-8_f32,
+            },
+            bg: Smoothed {
+                value: 0.0,
+                smoothed: 0.0,
+                coefficient: 1e-4_f32,
+            },
+            tiling: Smoothed {
+                value: 1.0,
+                smoothed: 1.0,
+                coefficient: 1e-4_f32,
+            },
+            filter: ScaleMode::Linear,
+            autofit: false,
+
+            canvas_to_screen: Matrix4::identity(),
+            screen_to_canvas: Matrix4::identity(),
+
+            sm_canvas_to_screen: Matrix4::identity(),
+
+            font,
+        }
+    }
+
+    pub fn update_transforms(&mut self, window_size: Vector2<f32>) {
+        self.canvas_to_screen = Matrix4::from_translation(window_size.extend(0.0) * 0.5)
+            * Matrix4::from_scale(self.zoom)
+            * Matrix4::from_translation(-self.pan.extend(0.0));
+
+        self.screen_to_canvas = self
+            .canvas_to_screen
+            .invert()
+            .unwrap_or(Matrix4::identity());
+    }
+
+    pub fn build_queue(&mut self) {
+        self.queue.clear();
+        self.queue_index = 0;
+
+        if let Some(path) = &self.path {
+            let parent = {
+                if path.is_dir() {
+                    Some(path)
+                } else if let Some(parent) = path.parent() {
+                    Some(&parent.to_path_buf())
+                } else {
+                    None
+                }
+            };
+
+            if let Some(parent) = parent {
+                let p = fs::read_dir(parent);
+                self.queue.clear();
+                if let Ok(p) = p {
+                    for file in p {
+                        if let Ok(file) = file
+                            && let Ok(format) = ImageFormat::from_path(file.path())
+                            && format.can_read()
+                        {
+                            self.queue.push(PathBuf::from(file.path()));
+                        }
+                    }
+                    self.queue.sort();
+                    for i in 0..self.queue.len() {
+                        if self.queue[i].eq(path) {
+                            self.queue_index = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn cycle_next(&mut self, ctx: &mut Context) {
+        self.build_queue();
+        if self.queue.len() == 0 {
+            return;
+        }
+
+        if let Some(path) = self.path.clone() {
+            let c = self.queue.clone();
+            let mut paths = c.iter().cycle();
+            let mut acc = false;
+            for _ in 0..c.len() {
+                let f = paths.next().unwrap();
+                acc |= f.eq(&path);
+                if acc {
+                    let next = paths.next().unwrap();
+                    match self.set_texture(next, ctx) {
+                        Ok(_) => {
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!("{e}");
+                            // we d o nothing and just skip to the next one
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // TODO this is the same as cycle_next but with a rev() somewhere
+    // so it would be cool if it can be generalised somehow
+    pub fn cycle_prev(&mut self, ctx: &mut Context) {
+        self.build_queue();
+        if self.queue.len() == 0 {
+            return;
+        }
+
+        if let Some(path) = self.path.clone() {
+            let c = self.queue.clone();
+            let mut paths = c.iter().rev().cycle();
+            let mut acc = false;
+            for _ in 0..c.len() {
+                let f = paths.next().unwrap();
+                acc |= f.eq(&path);
+                if acc {
+                    let next = paths.next().unwrap();
+                    match self.set_texture(next, ctx) {
+                        Ok(_) => {
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!("{e}");
+                            // we do nothing and just skip to the next one
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn copy_image_to_texture<'a>(
+        w: u32,
+        h: u32,
+        rgba32: &[u8],
+        tex_creator: &'a TextureCreator<WindowContext>,
+    ) -> Result<Texture<'a>, String> {
+        if let Ok(surface) = &mut Surface::new(w, h, PixelFormat::RGBA32) {
+            surface.with_lock_mut(|buffer| {
+                buffer.copy_from_slice(rgba32);
+            });
+
+            let tex = surface.as_texture(tex_creator);
+            return tex.map_err(|e| e.to_string());
+        }
+
+        Err("Failed to create surface".to_string())
+    }
+
+    fn direct_set_animated(frames: Frames, ctx: &mut Context) {
+        for x in frames {
+            if let Ok(frame) = x {
+                let delay = frame.delay();
+                let buffer = &frame.into_buffer();
+
+                if let Ok(tex) = Self::copy_image_to_texture(
+                    buffer.width(),
+                    buffer.height(),
+                    buffer.as_bytes(),
+                    ctx.tex_creator,
+                ) {
+                    ctx.delays.push(delay);
+                    ctx.textures.push(tex);
+                }
+            }
+        }
+    }
+
+    fn direct_set_single(img: DynamicImage, ctx: &mut Context) {
+        let l = img.into_rgba8();
+        let data = l.as_bytes();
+        if let Ok(tex) = Self::copy_image_to_texture(l.width(), l.height(), data, ctx.tex_creator) {
+            ctx.textures.push(tex);
+        }
+    }
+
+    pub fn set_info_from_decoder(&mut self, decoder: &impl ImageDecoder) {
+        let ref mut target = self.info;
+
+        target.clear();
+
+        target.push_str(format!("queue: {}/{}\n", self.queue_index + 1, self.queue.len()).as_str());
+
+        if let Some(path) = self.path.clone()
+            && let Ok(metadata) = fs::metadata(&path)
+        {
+            target.push_str(format!("source: {}\n", path.to_string_lossy()).as_str());
+            target.push_str(
+                format!("size: {}\n", human_readable_byte_count(metadata.len())).as_str(),
+            );
+        }
+
+        let d = decoder.dimensions();
+        target.push_str(format!("dimensions: {}x{}\n", d.0, d.1).as_str());
+
+        fn human_readable_byte_count(b: u64) -> String {
+            if b >= 1000_000 {
+                return format!("{:.2} MB", b as f32 / 1000_000.0);
+            } else if b >= 1000 {
+                return format!("{:.2} kB", b as f32 / 1000.0);
+            }
+            format!("{} B", b)
+        }
+    }
+
+    pub fn reset_transform(&mut self) {
+        self.pan = zero();
+        self.zoom = 1.0;
+        self.orientation.value = 0.0;
+        self.scale.value = Vector2::new(1.0, 1.0);
+    }
+
+    pub fn set_texture(&mut self, path: &Path, ctx: &mut Context) -> Result<(), String> {
+        let mut path = path.to_path_buf();
+
+        if path.is_dir()
+            && let Ok(dir) = path.read_dir()
+        {
+            for file in dir.filter_map(Result::ok) {
+                path = file.path();
+                break;
+            }
+        }
+
+        self.path = Some(path.clone());
+        self.info.clear();
+        self.animated_frame_index = 0;
+
+        self.build_queue();
+
+        ctx.textures.clear();
+        ctx.delays.clear();
+
+        ctx.canvas
+            .window_mut()
+            .set_title(&format!("{} - loading...", env!("CARGO_PKG_NAME")))
+            .ok();
+
+        println!("Loading {}", path.display());
+
+        match ImageReader::open(&path) {
+            Ok(reader) => {
+                // TODO better error handling
+                match reader.format() {
+                    Some(ImageFormat::Gif) => {
+                        if let Ok(decoder) = GifDecoder::new(reader.into_inner()) {
+                            self.set_info_from_decoder(&decoder);
+                            Self::direct_set_animated(decoder.into_frames(), ctx);
+                        } else {
+                            return Err("Failed to decode gif".to_string());
+                        }
+                    }
+                    Some(ImageFormat::WebP) => {
+                        if let Ok(decoder) = WebPDecoder::new(reader.into_inner()) {
+                            self.set_info_from_decoder(&decoder);
+                            if decoder.has_animation() {
+                                Self::direct_set_animated(decoder.into_frames(), ctx);
+                            } else if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                Self::direct_set_single(decoded, ctx);
+                            } else {
+                                return Err("Failed to decode static webp".to_string());
+                            }
+                        } else {
+                            return Err("Failed to decode webp".to_string());
+                        }
+                    }
+                    Some(ImageFormat::Png) => {
+                        if let Ok(decoder) = PngDecoder::new(reader.into_inner()) {
+                            self.set_info_from_decoder(&decoder);
+                            match decoder.is_apng() {
+                                Ok(true) => {
+                                    if let Ok(apng) = decoder.apng() {
+                                        Self::direct_set_animated(apng.into_frames(), ctx);
+                                    } else {
+                                        return Err("Failed to decode animated png".to_string());
+                                    }
+                                }
+                                _ => {
+                                    if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                        Self::direct_set_single(decoded, ctx);
+                                    } else {
+                                        return Err("Failed to decode png".to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        if let Ok(decoder) = reader.into_decoder() {
+                            self.set_info_from_decoder(&decoder);
+                            if let Ok(decoded) = DynamicImage::from_decoder(decoder) {
+                                Self::direct_set_single(decoded, ctx);
+                            }
+                        } else {
+                            return Err("Failed to decode image".to_string());
+                        }
+                    }
+                }
+
+                if let Some(file) = path.file_name()
+                    && let Some(s) = file.to_str()
+                {
+                    ctx.canvas
+                        .window_mut()
+                        .set_title(&format!("{} - {}", env!("CARGO_PKG_NAME"), s))
+                        .ok();
+                } else {
+                    ctx.canvas
+                        .window_mut()
+                        .set_title(&format!("{}", env!("CARGO_PKG_NAME")))
+                        .ok();
+                }
+
+                Ok(())
+            }
+
+            Err(error) => {
+                ctx.canvas
+                    .window_mut()
+                    .set_title(&format!("{}", env!("CARGO_PKG_NAME")))
+                    .ok();
+                Err(format!("Failed to open image: {error}"))
+            }
+        }
+    }
+}

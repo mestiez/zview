@@ -1,6 +1,6 @@
 [package]
 name = "zview"
-version = "0.1.0"
+version = "0.13.0"
 edition = "2024"
 
 [dependencies]
@@ -12,5 +12,4 @@ sdl3 = "0.18.4"
 [profile.release]
 strip = true
 lto = true
-codegen-units = 1
 panic = "abort"

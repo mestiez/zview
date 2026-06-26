@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::presentation::Presentation;
 use crate::text::FontTextureAtlas;
-use cgmath::num_traits::{zero, FloatConst};
+use cgmath::num_traits::{FloatConst, zero};
 use cgmath::{EuclideanSpace, Matrix4, Point3, Rad, Transform, Vector2, VectorSpace};
 use hjkl_clipboard::{Clipboard, MimeType, Selection};
 use image::{DynamicImage, EncodableLayout, ImageFormat, ImageReader};
@@ -21,10 +21,11 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{fs, slice};
 
+
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     if let Some(path) = &path {
         match state.set_texture(path, ctx) {
-            Ok(_) => (),
+            Ok(_) => fit_window(state, ctx),
             Err(e) => panic!("{}", e),
         };
     }
@@ -62,9 +63,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     ctx.canvas.present();
     let mut event_pump = ctx.sdl.event_pump().unwrap();
 
-    let mut clock = 0.0_f32;
     let mut frame_clock = Instant::now();
-    let mut frame_index = 0_usize;
 
     let mut dt: Duration;
     let mut dt_secs = 0.0_f32;
@@ -139,15 +138,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         state.autofit = !state.autofit;
                     }
                     (Some(Keycode::W), Mod::NOMOD) => {
-                        let m_w = ctx.textures.iter().map(|t| t.width()).max();
-                        let m_h = ctx.textures.iter().map(|t| t.height()).max();
-                        if let (Some(w), Some(h)) = (m_w, m_h)
-                            && ctx.get_window_mut().set_size(w, h).is_ok()
-                        {
-                            ctx.get_window_mut().restore();
-                            state.reset_transform();
-                            state.autofit = false;
-                        }
+                        fit_window(state, ctx);
                     }
 
                     // flipping heck
@@ -420,14 +411,6 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         if r > 0.0 {
             std::thread::sleep(Duration::from_secs_f32(r));
         }
-
-        clock += dt_secs;
-        frame_index += 1;
-        if clock > 1.0 {
-            println!("{frame_index} FPS");
-            frame_index = 0;
-            clock = 0.0;
-        }
     }
 }
 
@@ -573,5 +556,17 @@ fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(
         }
 
         result
+    }
+}
+
+fn fit_window(state: &mut Presentation, ctx: &mut Context){
+    let m_w = ctx.textures.iter().map(|t| t.width()).max();
+    let m_h = ctx.textures.iter().map(|t| t.height()).max();
+    if let (Some(w), Some(h)) = (m_w, m_h)
+        && ctx.get_window_mut().set_size(w, h).is_ok()
+    {
+        ctx.get_window_mut().restore();
+        state.reset_transform();
+        state.autofit = false;
     }
 }

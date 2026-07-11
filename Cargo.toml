@@ -1,11 +1,11 @@
 [package]
 name = "zview"
-version = "0.13.0"
+version = "0.13.2"
 edition = "2024"
 
 [dependencies]
 cgmath = { version = "0.18.0", features = ["swizzle"] }
-hjkl-clipboard = "0.33.2"
+hjkl-clipboard = "0.33.4"
 image = { version = "0.25.10", features = ["avif", "avif-native", "default-formats"] }
 sdl3 = "0.18.4"
 

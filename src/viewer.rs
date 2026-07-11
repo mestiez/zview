@@ -21,7 +21,6 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{fs, slice};
 
-
 pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     if let Some(path) = &path {
         match state.set_texture(path, ctx) {
@@ -55,7 +54,6 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
     let mut verts_transformed = verts.clone();
 
     let idx = VertexIndices::U8(&[0, 1, 3, 3, 2, 1]);
-    let mut should_update_instantly = true;
 
     ctx.canvas.set_draw_color(Color::BLACK);
     ctx.canvas.set_blend_mode(BlendMode::Blend);
@@ -96,102 +94,18 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
                 Event::Window { win_event, .. } => {
                     if let WindowEvent::Resized(_, _) = win_event {
-                        should_update_instantly = true;
+                        state.should_update_instantly = true;
                     }
                 }
 
                 // keybinds
                 Event::KeyDown {
                     keycode, keymod, ..
-                } => match (keycode, keymod) {
-                    (Some(Keycode::Left), Mod::NOMOD) => {
-                        state.cycle_prev(ctx);
-                        state.reset_transform();
-                        should_update_instantly = true;
+                } => {
+                    if let Some(k) = keycode {
+                        handle_keybind(k, keymod, ctx, state);
                     }
-                    (Some(Keycode::Right), Mod::NOMOD) => {
-                        state.cycle_next(ctx);
-                        state.reset_transform();
-                        should_update_instantly = true;
-                    }
-                    (Some(Keycode::B), Mod::NOMOD) => {
-                        state.bg.value = if state.bg.value > 0.5 { 0.0 } else { 1.0 }
-                    }
-                    (Some(Keycode::F), Mod::NOMOD) => {
-                        state.filter = match state.filter {
-                            ScaleMode::Linear => ScaleMode::Nearest,
-                            _ => ScaleMode::Linear,
-                        }
-                    }
-                    (Some(Keycode::Home), Mod::NOMOD) | (Some(Keycode::Backspace), Mod::NOMOD) => {
-                        state.autofit = false;
-                        state.reset_transform();
-                    }
-                    (Some(Keycode::F5), Mod::NOMOD) => {
-                        let p = state.path.clone();
-                        if let Some(path) = &p {
-                            state.bg.smoothed = 0.5;
-                            state.set_texture(path.as_path(), ctx).ok();
-                        }
-                    }
-                    (Some(Keycode::Period), Mod::NOMOD) => {
-                        state.autofit = !state.autofit;
-                    }
-                    (Some(Keycode::W), Mod::NOMOD) => {
-                        fit_window(state, ctx);
-                    }
-
-                    // flipping heck
-                    (Some(Keycode::H), Mod::NOMOD) => {
-                        state.scale.value.x *= -1.0;
-                    }
-                    (Some(Keycode::V), Mod::NOMOD) => {
-                        state.scale.value.y *= -1.0;
-                    }
-
-                    // tiling
-                    (Some(Keycode::T), Mod::LSHIFTMOD) => {
-                        state.tiling.value = (state.tiling.value - 2.0).max(1.0);
-                    }
-                    (Some(Keycode::T), Mod::NOMOD) => {
-                        state.tiling.value = (state.tiling.value + 2.0).min(17.0);
-                    }
-
-                    // rotate
-                    (Some(Keycode::R), Mod::LSHIFTMOD | Mod::RSHIFTMOD | Mod::NOMOD) => {
-                        let half_pi = f32::FRAC_PI_2();
-
-                        state.orientation.value += if keymod.contains(Mod::LSHIFTMOD) {
-                            -half_pi
-                        } else {
-                            half_pi
-                        };
-
-                        // snap
-                        state.orientation.value =
-                            (state.orientation.value / half_pi).round() * half_pi
-                    }
-
-                    // clipboard shit
-                    (Some(Keycode::V), Mod::LCTRLMOD) => {
-                        // paste
-                        let clipboard = ctx.video.clipboard();
-                        if paste_from_clipboard(state, ctx).is_err() {
-                            if let Ok(text) = clipboard.clipboard_text() {
-                                if fs::exists(&text).unwrap_or(false) {
-                                    state.set_texture(Path::new(&text), ctx).ok();
-                                    state.reset_transform();
-                                    state.tiling.value = 0.0;
-                                }
-                            }
-                        }
-                    }
-                    (Some(Keycode::C), Mod::LCTRLMOD) => {
-                        // copy
-                        copy_to_clipboard(state);
-                    }
-                    _ => {}
-                },
+                }
 
                 // on drop
                 Event::DropFile { filename, .. } => {
@@ -200,7 +114,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                         Ok(_) => {
                             state.reset_transform();
                             state.autofit = true;
-                            should_update_instantly = true;
+                            state.should_update_instantly = true;
                         }
                         Err(e) => eprintln!("{}", e),
                     }
@@ -321,8 +235,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
             state.update_transforms(window_size);
 
-            if should_update_instantly {
-                should_update_instantly = false;
+            if state.should_update_instantly {
+                state.should_update_instantly = false;
                 state.scale.smoothed = state.scale.value;
                 state.orientation.smoothed = state.orientation.value;
                 state.tiling.smoothed = state.tiling.value;
@@ -343,6 +257,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
             ctx.canvas.set_draw_color(Color::WHITE);
 
             // final transformation
+            let tiling = state.tiling.smoothed;
             let transform = state.sm_canvas_to_screen
                 * Matrix4::from_angle_z(Rad(state.orientation.smoothed))
                 * Matrix4::from_nonuniform_scale(
@@ -350,16 +265,14 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
                     state.scale.smoothed.y,
                     1.0,
                 )
-                * Matrix4::from_translation((tex_size * -0.5).extend(0.0))
-                * Matrix4::from_nonuniform_scale(tex_w, tex_h, 1.0);
+                * Matrix4::from_translation((tex_size * tiling * -0.5).extend(0.0))
+                * Matrix4::from_nonuniform_scale(tex_w * tiling, tex_h * tiling, 1.0);
 
-            let tiling = state.tiling.smoothed;
             for i in 0..verts.len() {
                 let v = &mut verts_transformed[i];
                 verts[i].clone_into(v);
 
                 let p = transform.transform_point(Point3::new(v.position.x, v.position.y, 0.0));
-
                 v.position.x = p.x;
                 v.position.y = p.y;
 
@@ -411,6 +324,98 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         if r > 0.0 {
             std::thread::sleep(Duration::from_secs_f32(r));
         }
+    }
+}
+
+fn handle_keybind(keycode: Keycode, keymod: Mod, ctx: &mut Context, state: &mut Presentation) {
+
+    let keymod = keymod & !Mod::NUMMOD; // we do this to make sure numlock is completely ignored
+
+    match (keycode, keymod) {
+        (Keycode::Left, Mod::NOMOD) => {
+            state.cycle_prev(ctx);
+            state.reset_transform();
+            state.should_update_instantly = true;
+        }
+        (Keycode::Right, Mod::NOMOD) => {
+            state.cycle_next(ctx);
+            state.reset_transform();
+            state.should_update_instantly = true;
+        }
+        (Keycode::B, Mod::NOMOD) => state.bg.value = if state.bg.value > 0.5 { 0.0 } else { 1.0 },
+        (Keycode::F, Mod::NOMOD) => {
+            state.filter = match state.filter {
+                ScaleMode::Linear => ScaleMode::Nearest,
+                _ => ScaleMode::Linear,
+            }
+        }
+        (Keycode::Home, Mod::NOMOD) | (Keycode::Backspace, Mod::NOMOD) => {
+            state.autofit = false;
+            state.reset_transform();
+        }
+        (Keycode::F5, Mod::NOMOD) => {
+            let p = state.path.clone();
+            if let Some(path) = &p {
+                state.bg.smoothed = 0.5;
+                state.set_texture(path.as_path(), ctx).ok();
+            }
+        }
+        (Keycode::Period, Mod::NOMOD) => {
+            state.autofit = !state.autofit;
+        }
+        (Keycode::W, Mod::NOMOD) => {
+            fit_window(state, ctx);
+        }
+
+        // flipping heck
+        (Keycode::H, Mod::NOMOD) => {
+            state.scale.value.x *= -1.0;
+        }
+        (Keycode::V, Mod::NOMOD) => {
+            state.scale.value.y *= -1.0;
+        }
+
+        // tiling
+        (Keycode::T, Mod::LSHIFTMOD) => {
+            state.tiling.value = (state.tiling.value - 2.0).max(1.0);
+        }
+        (Keycode::T, Mod::NOMOD) => {
+            state.tiling.value = (state.tiling.value + 2.0).min(17.0);
+        }
+
+        // rotate
+        (Keycode::R, Mod::LSHIFTMOD | Mod::RSHIFTMOD | Mod::NOMOD) => {
+            let half_pi = f32::FRAC_PI_2();
+
+            state.orientation.value += if keymod.contains(Mod::LSHIFTMOD) {
+                -half_pi
+            } else {
+                half_pi
+            };
+
+            // snap
+            state.orientation.value = (state.orientation.value / half_pi).round() * half_pi
+        }
+
+        // clipboard shit
+        (Keycode::V, Mod::LCTRLMOD) => {
+            // paste
+            let clipboard = ctx.video.clipboard();
+            if paste_from_clipboard(state, ctx).is_err() {
+                if let Ok(text) = clipboard.clipboard_text() {
+                    if fs::exists(&text).unwrap_or(false) {
+                        state.set_texture(Path::new(&text), ctx).ok();
+                        state.reset_transform();
+                        state.tiling.value = 0.0;
+                    }
+                }
+            }
+        }
+        (Keycode::C, Mod::LCTRLMOD) => {
+            // copy
+            copy_to_clipboard(state);
+        }
+        _ => {}
     }
 }
 
@@ -559,7 +564,7 @@ fn paste_from_clipboard(state: &mut Presentation, ctx: &mut Context) -> Result<(
     }
 }
 
-fn fit_window(state: &mut Presentation, ctx: &mut Context){
+fn fit_window(state: &mut Presentation, ctx: &mut Context) {
     let m_w = ctx.textures.iter().map(|t| t.width()).max();
     let m_h = ctx.textures.iter().map(|t| t.height()).max();
     if let (Some(w), Some(h)) = (m_w, m_h)

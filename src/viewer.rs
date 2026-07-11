@@ -329,7 +329,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
 fn handle_keybind(keycode: Keycode, keymod: Mod, ctx: &mut Context, state: &mut Presentation) {
 
-    let keymod = keymod & !Mod::NUMMOD;
+    let keymod = keymod & !Mod::NUMMOD; // we do this to make sure numlock is completely ignored
 
     match (keycode, keymod) {
         (Keycode::Left, Mod::NOMOD) => {

@@ -150,60 +150,35 @@ impl Presentation<'_> {
         }
     }
 
-    pub fn cycle_next(&mut self, ctx: &mut Context) {
-        self.build_queue();
-        if self.queue.len() == 0 {
-            return;
-        }
-
-        if let Some(path) = self.path.clone() {
-            let c = self.queue.clone();
-            let mut paths = c.iter().cycle();
-            let mut acc = false;
-            for _ in 0..c.len() {
-                let f = paths.next().unwrap();
-                acc |= f.eq(&path);
-                if acc {
-                    let next = paths.next().unwrap();
-                    match self.set_texture(next, ctx) {
-                        Ok(_) => {
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!("{e}");
-                            // we d o nothing and just skip to the next one
-                        }
-                    }
-                }
-            }
-        }
+    pub fn cycle_prev(&mut self, ctx: &mut Context) {
+        self.cycle(ctx, -1);
     }
 
-    // TODO this is the same as cycle_next but with a rev() somewhere
-    // so it would be cool if it can be generalised somehow
-    pub fn cycle_prev(&mut self, ctx: &mut Context) {
+    pub fn cycle_next(&mut self, ctx: &mut Context) {
+        self.cycle(ctx, 1);
+    }
+
+    fn cycle(&mut self, ctx: &mut Context, direction: i32) {
         self.build_queue();
-        if self.queue.len() == 0 {
+        let queue = self.queue.to_owned();
+        let len = queue.len();
+        if len == 0 {
             return;
         }
 
-        if let Some(path) = self.path.clone() {
-            let c = self.queue.clone();
-            let mut paths = c.iter().rev().cycle();
-            let mut acc = false;
-            for _ in 0..c.len() {
-                let f = paths.next().unwrap();
-                acc |= f.eq(&path);
-                if acc {
-                    let next = paths.next().unwrap();
-                    match self.set_texture(next, ctx) {
-                        Ok(_) => {
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!("{e}");
-                            // we do nothing and just skip to the next one
-                        }
+        for i in 1..len {
+            // start at 1 because its pointless to check ourselves again
+            let index =
+                (self.queue_index as i32 + i as i32 * direction).rem_euclid(len as i32) as usize; // `i` is our offset
+            let path = queue.get(index);
+            if let Some(path) = path {
+                match self.set_texture(path, ctx) {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("{e}");
+                        // we d o nothing and just skip to the next one
                     }
                 }
             }

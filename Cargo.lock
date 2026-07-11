@@ -479,9 +479,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hjkl-clipboard"
-version = "0.33.2"
+version = "0.33.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e0123b5450624f8ecf624edbdf4fbaa8dfe6800782c82adfd3cef760851b828"
+checksum = "15e8c12093c9c5beadc213eebc0388711933f4b934f45f38171837ebb5036566"
 dependencies = [
  "async-trait",
  "bitflags",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "zview"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "cgmath",
  "hjkl-clipboard",

@@ -44,6 +44,8 @@ pub struct Presentation<'a> {
 
     pub font: FontTextureAtlas<'a>,
 
+    pub should_update_instantly: bool,
+
     // dir: Option<PathBuf>,
     queue: Vec<PathBuf>,
     queue_index: usize,
@@ -94,6 +96,7 @@ impl Presentation<'_> {
             sm_canvas_to_screen: Matrix4::identity(),
 
             font,
+            should_update_instantly: false,
         }
     }
 

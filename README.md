@@ -4,6 +4,12 @@ Image viewer for X11 heavily inspired by [NoBS Image Viewer](https://ropemikad.i
 
 Supports `avif`, `tga`, `tiff`, `webp`, `bmp`, `gif`, `ico`, `jpeg`, `png`, and `qoi`. 
 
+## Installation
+
+The easiest way is by using Cargo, which can be installed using [rustup](https://rustup.rs/).
+
+Run `cargo install --git https://github.com/mestiez/zview`
+
 ## Dependencies
 
 - libsdl3

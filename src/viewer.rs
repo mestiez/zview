@@ -65,6 +65,8 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
     let mut dt: Duration;
     let mut dt_secs = 0.0_f32;
+    
+    ctx.canvas.window_mut().show();
 
     'running: loop {
         ctx.canvas.set_draw_color({
@@ -406,7 +408,7 @@ fn handle_keybind(keycode: Keycode, keymod: Mod, ctx: &mut Context, state: &mut 
                     if fs::exists(&text).unwrap_or(false) {
                         state.set_texture(Path::new(&text), ctx).ok();
                         state.reset_transform();
-                        state.tiling.value = 0.0;
+                        state.tiling.value = 1.0;
                     }
                 }
             }

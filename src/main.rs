@@ -57,6 +57,7 @@ Options:
     let window = video
         .window(env!("CARGO_PKG_NAME"), 512, 512)
         .resizable()
+        .hidden()
         .build()
         .expect("failed to create window");
 

@@ -479,9 +479,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hjkl-clipboard"
-version = "0.33.4"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15e8c12093c9c5beadc213eebc0388711933f4b934f45f38171837ebb5036566"
+checksum = "8c4e45ddb45202c79859e8f233ee9da9098b0bcbebba989d7d62740f95325422"
 dependencies = [
  "async-trait",
  "bitflags",
@@ -970,9 +970,9 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "sdl3"
-version = "0.18.4"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25bd22eb1bbc9137e914022b4994ed35591eea0884e9e3e98e6d9895cad6e1d2"
+checksum = "f90c470b564b34e7f9ff0719ed7dc05ec71bc73fa4b28e0750a17b8987cf45f8"
 dependencies = [
  "bitflags",
  "libc",
@@ -981,9 +981,9 @@ dependencies = [
 
 [[package]]
 name = "sdl3-sys"
-version = "0.6.6+SDL-3.4.10"
+version = "0.7.1+SDL-3.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04e7f134def04ed72e6f55187c6c29c72f7dab5d359c4be0dd49c9b97fef59c7"
+checksum = "6c10781cd13b03f18f26af765c9909ac64d362fd645c4fa92db51685c834cf8b"
 dependencies = [
  "pkg-config",
  "vcpkg",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "zview"
-version = "0.13.2"
+version = "0.14.0"
 dependencies = [
  "cgmath",
  "hjkl-clipboard",

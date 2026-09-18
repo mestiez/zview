@@ -1,13 +1,13 @@
 [package]
 name = "zview"
-version = "0.13.2"
+version = "0.14.0"
 edition = "2024"
 
 [dependencies]
 cgmath = { version = "0.18.0", features = ["swizzle"] }
-hjkl-clipboard = "0.33.4"
+hjkl-clipboard = "0.42.0"
 image = { version = "0.25.10", features = ["avif", "avif-native", "default-formats"] }
-sdl3 = "0.18.4"
+sdl3 = "0.20.0"
 
 [profile.release]
 strip = true

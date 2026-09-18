@@ -15,6 +15,7 @@ use sdl3::surface::Surface;
 use sdl3::video::WindowContext;
 use std::fs;
 use std::path::{Path, PathBuf};
+use image::codecs::avif::AvifDecoder;
 
 pub struct Presentation<'a> {
     pub path: Option<PathBuf>,

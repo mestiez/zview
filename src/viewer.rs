@@ -65,6 +65,23 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
 
     let mut dt: Duration;
     let mut dt_secs = 0.0_f32;
+
+    let target_frame_time_secs = {
+        const FALLBACK: f32 = 1.0 / 300.0;
+        if let Ok(display) = ctx.get_window().get_display()
+            && let Ok(mode) = display.get_mode()
+        {
+            if mode.refresh_rate_numerator > 0 {
+                mode.refresh_rate_denominator as f32 / mode.refresh_rate_numerator as f32
+            } else {
+                // reported mode has invalid refresh rate...
+                FALLBACK
+            }
+        } else {
+            // no display found (???)
+            FALLBACK
+        }
+    };
     
     ctx.canvas.window_mut().show();
 
@@ -78,7 +95,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         let mut mouse_wheel = 0.0f64;
         let show_info = event_pump.keyboard_state().is_scancode_pressed(Scancode::I);
 
-        for event in event_pump.poll_iter() {
+        for event in event_pump.poll_iter().take(6) {
             match event {
                 Event::Quit { .. }
                 | Event::KeyDown {
@@ -305,23 +322,7 @@ pub fn run(path: Option<&Path>, state: &mut Presentation, ctx: &mut Context) {
         dt = frame_clock.elapsed();
         dt_secs = dt.as_secs_f32();
         frame_clock = Instant::now();
-
-        let target_frame_time_secs = {
-            const FALLBACK: f32 = 1.0 / 300.0;
-            if let Ok(display) = ctx.get_window().get_display()
-                && let Ok(mode) = display.get_mode()
-            {
-                if mode.refresh_rate_numerator > 0 {
-                    mode.refresh_rate_denominator as f32 / mode.refresh_rate_numerator as f32
-                } else {
-                    // reported mode has invalid refresh rate...
-                    FALLBACK
-                }
-            } else {
-                // no display found (???)
-                FALLBACK
-            }
-        };
+        
         let r = target_frame_time_secs - frame_clock.elapsed().as_secs_f32();
         if r > 0.0 {
             std::thread::sleep(Duration::from_secs_f32(r));

@@ -62,6 +62,7 @@ Touchscreen pan and pinch zoom are supported.
 
 - All images are fully loaded into memory before being displayed. For large and/or animated images, this can become a
   problem. 
+- Animated images are not cached properly and are copied to a buffer every frame
 - HDR images aren't rendered correctly
 - Some colorspace information is ignored
 - "Copy to clipboard" isn't working reliably

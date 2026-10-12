@@ -120,6 +120,7 @@ impl<'a> FontTextureAtlas<'a> {
         }
     }
 
+    // TODO this shouldnt exist. all of the above should be locked, buffer edited, and then uploaded
     fn set_pixel(surface: &mut Surface, x: u32, y: u32, value: u8) {
         let i = (y * surface.pitch() + x * 4) as usize;
         surface.with_lock_mut(|buffer| {

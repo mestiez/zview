@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use crate::context::Context;
 use crate::smoothed::Smoothed;
 use crate::text::FontTextureAtlas;
@@ -161,7 +162,7 @@ impl Presentation<'_> {
 
     fn cycle(&mut self, ctx: &mut Context, direction: i32) {
         self.build_queue();
-        let queue = self.queue.to_owned();
+        let queue = self.queue.clone();
         let len = queue.len();
         if len == 0 {
             return;
@@ -236,19 +237,17 @@ impl Presentation<'_> {
 
         target.clear();
 
-        target.push_str(format!("queue: {}/{}\n", self.queue_index + 1, self.queue.len()).as_str());
+        write!(target, "queue: {}/{}\n", self.queue_index + 1, self.queue.len()).ok();
 
         if let Some(path) = self.path.clone()
             && let Ok(metadata) = fs::metadata(&path)
         {
-            target.push_str(format!("source: {}\n", path.to_string_lossy()).as_str());
-            target.push_str(
-                format!("size: {}\n", human_readable_byte_count(metadata.len())).as_str(),
-            );
+            write!(target, "source: {}\n", path.to_string_lossy()).ok();
+            write!(target, "size: {}\n", human_readable_byte_count(metadata.len())).ok();
         }
 
         let d = decoder.dimensions();
-        target.push_str(format!("dimensions: {}x{}\n", d.0, d.1).as_str());
+        write!(target, "dimensions: {}x{}\n", d.0, d.1).ok();
 
         fn human_readable_byte_count(b: u64) -> String {
             if b >= 1000_000 {

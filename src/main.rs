@@ -27,29 +27,28 @@ fn main() {
         if arg.starts_with('-') {
             match arg.as_ref() {
                 "-v" | "--version" => println!("v{}", env!("CARGO_PKG_VERSION")),
-                "-h" | "--help" => {
-                    println!(
-                        "zview - image viewer for x11
-
-Usage:
-    zview [options] [path]
-
-Arguments:
-    path              Path to the image or directory (optional).
-
-Options:
-    -v, --version     Display version information.
-    -h, --help        Show help and usage information.
-"
-                    );
-                }
+                "-h" | "--help" => print_help(),
                 _ => {
-                    eprintln!("Unrecognized flag '{}'", arg);
-                    eprintln!("Use --help or -h for more information");
+                    eprintln!("ERROR: Unrecognized flag '{}'.\n", arg);
+
+                    print_help();
                 }
             }
             return;
         }
+    }
+
+    if args.len() < 2 {
+        print_help();
+        return;
+    }
+
+    let path = Path::new(&args[1]);
+
+    if !path.exists() {
+        eprintln!("ERROR: image at '{}' could not be found.\n", args[1]);
+        print_help();
+        return;
     }
 
     let sdl = sdl3::init().expect("failed to init SDL");
@@ -60,7 +59,7 @@ Options:
         .hidden()
         .build()
         .expect("failed to create window");
-    
+
     let mut canvas = window.into_canvas();
     let tc = canvas.texture_creator();
 
@@ -74,7 +73,6 @@ Options:
         touch: TouchState::new(),
     };
 
-
     let font = BdfFont::load(
         &include_bytes!("./assets/haxor-12.bdf")[..],
         // will shit the bed if the font is invalid or whatever
@@ -82,11 +80,28 @@ Options:
 
     run(
         if args.len() > 1 {
-            Some(Path::new(&args[1]))
+            Some(path)
         } else {
             None
         },
         &mut Presentation::new(FontTextureAtlas::new(&font, ctx.tex_creator).unwrap()),
         &mut ctx,
+    );
+}
+
+fn print_help() {
+    println!(
+        "zview - image viewer for x11
+
+Usage:
+    zview [options] [path]
+
+Arguments:
+    path              Path to the image or directory (optional).
+
+Options:
+    -v, --version     Display version information.
+    -h, --help        Show help and usage information.
+"
     );
 }

@@ -36,27 +36,27 @@ Or use the [prebuilt binaries](https://github.com/mestiez/zview/releases) if you
 You can also drag the file into the window.
 Touchscreen pan and pinch zoom are supported.
 
-|         Input | Action                  |
-|--------------:|:------------------------|
-|         `LMB` | Pan                     |
-|           `R` | Rotate clockwise        |
-|     `Shift+R` | Rotate counter-clockwise|
-|           `V` | Flip (vertical)         |
-|           `H` | Flip (horizontal)       |
-|        `Home` | Reset camera            |
-|           `.` | Auto fit image          |
-|           `W` | Auto size window        |
-|           `B` | Toggle background       |
-|           `F` | Toggle linear filtering |
-|           `T` | Increment tiling        |
-|     `Shift+T` | Decrement tiling        |
-|      `Ctrl+V` | Load from clipboard     |
-|      `Ctrl+C` | Copy to clipboard       |
-|          `->` | Next in directory       |
-|          `<-` | Previous in directory   |
-|          `F5` | Reload image            |
-|           `I` | Show image info         |
-| `Q`, `Escape` | Quit                    |
+|         Input | Action                   |
+|--------------:|:-------------------------|
+|         `LMB` | Pan                      |
+|           `R` | Rotate clockwise         |
+|     `Shift+R` | Rotate counter-clockwise |
+|           `V` | Flip (vertical)          |
+|           `H` | Flip (horizontal)        |
+|        `Home` | Reset camera             |
+|           `.` | Auto fit image           |
+|           `W` | Auto size window         |
+|           `B` | Toggle background        |
+|           `F` | Toggle linear filtering  |
+|           `T` | Increment tiling         |
+|     `Shift+T` | Decrement tiling         |
+|      `Ctrl+V` | Load from clipboard      |
+|      `Ctrl+C` | Copy to clipboard        |
+|          `->` | Next in directory        |
+|          `<-` | Previous in directory    |
+|          `F5` | Reload image             |
+|           `I` | Show image info          |
+| `Q`, `Escape` | Quit                     |
 
 ## Known issues and limitations
 

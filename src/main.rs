@@ -60,7 +60,7 @@ Options:
         .hidden()
         .build()
         .expect("failed to create window");
-
+    
     let mut canvas = window.into_canvas();
     let tc = canvas.texture_creator();
 

@@ -12,11 +12,15 @@ Run `cargo install --git https://github.com/mestiez/zview`
 
 ## Dependencies
 
-- libsdl3
+These dependencies are needed to build from source.
+
+- libsdl3-dev
+- libdav1d-dev
+- libgcc
 
 ## Building
 
-Ensure libsdl3 and Cargo are installed.
+Ensure the dependencies are present on your system.
 
 Run `cargo build -r` in the project folder. The output binary will be at `target/release/zview`. You can move it to your local binary path.
 
